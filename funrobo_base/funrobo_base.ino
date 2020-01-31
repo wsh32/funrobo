@@ -4,8 +4,9 @@
  * Baby Boy Bot 
  * Loops and responds to certain text commands 
  * 
+ * Author: Wesley Soo-Hoo
+ * 
  */
-// TODO: ???? 
 // load Libs
 #include<Servo.h>
 // Global vars, obj, and constants
