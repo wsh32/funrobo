@@ -11,6 +11,8 @@
  * 
  */
 
+#include "thinklab.h"
+
 void setup() {
 
 }
