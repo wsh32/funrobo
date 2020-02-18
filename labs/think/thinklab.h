@@ -1,8 +1,29 @@
+#include <Servo.h>
+#include <Arduino.h>
+
+#define POT_PIN       A0
+#define RUDDER_PIN    0
+#define PROPS_PIN     0
+#define TURNTABLE_PIN 5
+#define LED_PIN       0
+#define BUZZER_PIN    0
+
+struct HeadingCommand {
+  float turntableCommand;
+  float rudderCommand;
+};
+
+// Sense functions
+float getHeading();
+
+// Think functions
+
+
 // Controller functions
-void set_heading(float heading);
-void set_vel(float vel);
+HeadingCommand setHeading(float headingCommand, float potPosition);
+float setVel(float vel);
 
 // Act functions
-void set_rudder(float rudder_pcnt);
-void set_props(float props_pcnt);
-void set_turntable(float turntable_pcnt);
+void setRudder(float rudderPcnt, Servo rudderServo);
+void setProps(float propsPcnt, Servo propsServo);
+void setTurntable(float turntablePcnt, Servo turntableServo);
