@@ -8,22 +8,24 @@
 #define LED_PIN       0
 #define BUZZER_PIN    0
 
+#define FILTER_GAIN 0.125
+
 struct HeadingCommand {
   float turntableCommand;
-  float rudderCommand;
+  int rudderCommand;
 };
 
 // Sense functions
-float getHeading();
+float getHeading(float lastHeading);
 
 // Think functions
 
 
 // Controller functions
 HeadingCommand setHeading(float headingCommand, float potPosition);
-float setVel(float vel);
+int setVel(int vel);
 
 // Act functions
-void setRudder(float rudderPcnt, Servo rudderServo);
-void setProps(float propsPcnt, Servo propsServo);
+void setRudder(int rudderPcnt, Servo rudderServo);
+void setProps(int propsPcnt, Servo propsServo);
 void setTurntable(float turntablePcnt, Servo turntableServo);

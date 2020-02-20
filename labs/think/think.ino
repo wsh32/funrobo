@@ -20,12 +20,13 @@ Servo rudderServo;
 Servo propsServo;
 Servo turntableServo;
 
-// TODO tune
-float kP_headingControl = 0.5;
+// P control for turntable
+int kP_headingControl = 1.1;
+float heading = 0;
 
 void setup() {
   Serial.begin(9600);
-  pinMode(POT_PIN, INPUT);
+  // pinMode(POT_PIN, INPUT);
   rudderServo.attach(RUDDER_PIN);
   propsServo.attach(PROPS_PIN);
   turntableServo.attach(TURNTABLE_PIN);
@@ -34,31 +35,34 @@ void setup() {
 void loop() {
   // SENSE
   // Get current heading
-  float heading = getHeading();
+  heading = getHeading(heading);
 
   // THINK
   // TODO get commands from arbiter
   float headingCommandDegs = 0;
-  float velCommand = 0;
+  int velCommand = 10;
 
   // CONTROLLER
   HeadingCommand headingOutput = setHeading(headingCommandDegs, heading);
   float turntableOutput = headingOutput.turntableCommand;
-  float rudderOutput = headingOutput.rudderCommand;
-
-  float propsOutput = setVel(velCommand);
+  int rudderOutput = headingOutput.rudderCommand;
+  int propsOutput = setVel(velCommand);
 
   // ACT
-//  setRudder(rudderOutput, rudderServo);
+  setRudder(rudderOutput, rudderServo);
   setProps(propsOutput, propsServo);
-//  setTurntable(turntableOutput, turntableServo);
+  setTurntable(turntableOutput, turntableServo);
 }
 
 // SENSE FUNCTIONS
-float getHeading() {
+float getHeading(float lastHeading) {
   int rawPotReading = analogRead(POT_PIN);
-  // TODO Calibrate these values
-  return map(rawPotReading, 0, 1024, -180, 180); // Map raw units to degrees
+  float headingAngle = map(rawPotReading, 200, 420, -90, 90); // Map raw units to degrees
+  
+  // filter the potentiometer angle so it is smooth
+  headingAngle = FILTER_GAIN * headingAngle + (1-FILTER_GAIN)*lastHeading;
+  Serial.println(headingAngle);
+  return headingAngle;
 }
 
 // CONTROLLER FUNCTIONS
@@ -73,55 +77,57 @@ HeadingCommand setHeading(float headingCommand, float potPosition) {
    * - potPosition: position feedback (in degrees)
    */
   // Set rudder angle
-  // TODO mapping for rudder from heading
-  float rudderAngle = map(headingCommand, -180, 180, -1, 1);  // map from degrees to rudder units (-1 to 1)
-
   // Move turntable to position
   // PID loop, kP_headingControl is defined in thinklab.h
   float turntablePower = kP_headingControl * (headingCommand - potPosition);
-  turntablePower = max(min(turntablePower, 1), -1);  // Threshold to -1 to 1
-
+  turntablePower = max(min(turntablePower, 100), -100);  // Threshold to -100 to 100
+  
   HeadingCommand command;
-  command.rudderCommand = rudderAngle;
+  command.rudderCommand = headingCommand - potPosition;
   command.turntableCommand = turntablePower;
 
   return command;
 }
 
-float setVel(float vel) {
+int setVel(int vel) {
   /**
    * Velocity controller
    * Open loop control of propeller speed and direction
+   * Passes through velocity as a int
    * 
    * Parameters:
    * - vel: Velocity command
    */
 
-  float propPower = map(vel, -10, 10, -1, 1);  // map from velocity (TODO get actual values) to prop units (-1 to 1)
-  return propPower;
+  return vel;
 }
 
 // ACT FUNCTIONS
-void setRudder(float rudderPcnt, Servo rudderServo) {
+void setRudder(int rudderPcnt, Servo rudderServo) {
   /**
    * Set rudder servo
    * 
    * Parameters:
-   * - rudderPcnt: Value from -1 to 1
+   * - rudderPcnt: Value from -100 to 100
    * - rudderServo: Initialized Servo class
    */
-   rudderServo.write(map(rudderPcnt, -1, 1, 0, 255));
+   int rudderAng = map(rudderPcnt, -180, 180, 0, 185);
+   // threshold so we aren't burning out motors
+   rudderAng = max(min(rudderAng, 120), 55);
+   rudderServo.write(rudderAng);
 }
 
-void setProps(float propsPcnt, Servo propsServo) {
+void setProps(int propsPcnt, Servo propsServo) {
   /**
    * Set propeller servo
    * 
    * Parameters:
-   * - propsPcnt: Value from -1 to 1
+   * - propsPcnt: Value from -100 to 100
    * - propsServo: Initialized Servo class
    */
-   int propPower = map(propsPcnt, -1, 1, 0, 255);
+   // map raw velocity command to motor power
+   Serial.println(propsPcnt);
+   int propPower = map(propsPcnt, 0, 100, 0, 255);
    Serial.println(propPower);
    propsServo.write(propPower);
 }
@@ -134,5 +140,6 @@ void setTurntable(float turntablePcnt, Servo turntableServo) {
    * - turntablePcnt: Value from -1 to 1
    * - turntableServo: Initialized Servo class
    */
-   turntableServo.write(map(turntablePcnt, -1, 1, 0, 186));
+   int turntablePower = map(turntablePcnt, -100, 100, 0, 185);
+   turntableServo.write(turntablePower);
 }
