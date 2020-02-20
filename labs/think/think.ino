@@ -111,10 +111,10 @@ void setRudder(int rudderPcnt, Servo rudderServo) {
    * - rudderPcnt: Value from -100 to 100
    * - rudderServo: Initialized Servo class
    */
-   int rudderAng = map(rudderPcnt, -180, 180, 0, 185);
-   // threshold so we aren't burning out motors
-   rudderAng = max(min(rudderAng, 120), 55);
-   rudderServo.write(rudderAng);
+  int rudderAng = map(rudderPcnt, -180, 180, 0, 185);
+  // threshold so we aren't burning out motors
+  rudderAng = max(min(rudderAng, 120), 55);
+  rudderServo.write(rudderAng);
 }
 
 void setProps(int propsPcnt, Servo propsServo) {
@@ -125,11 +125,11 @@ void setProps(int propsPcnt, Servo propsServo) {
    * - propsPcnt: Value from -100 to 100
    * - propsServo: Initialized Servo class
    */
-   // map raw velocity command to motor power
-   Serial.println(propsPcnt);
-   int propPower = map(propsPcnt, 0, 100, 0, 255);
-   Serial.println(propPower);
-   propsServo.write(propPower);
+  // map raw velocity command to motor power
+  Serial.println(propsPcnt);
+  int propPower = map(propsPcnt, 0, 100, 0, 255);
+  Serial.println(propPower);
+  propsServo.write(propPower);
 }
 
 void setTurntable(float turntablePcnt, Servo turntableServo) {
@@ -140,6 +140,6 @@ void setTurntable(float turntablePcnt, Servo turntableServo) {
    * - turntablePcnt: Value from -1 to 1
    * - turntableServo: Initialized Servo class
    */
-   int turntablePower = map(turntablePcnt, -100, 100, 0, 185);
-   turntableServo.write(turntablePower);
+  int turntablePower = map(turntablePcnt, -100, 100, 0, 185);
+  turntableServo.write(turntablePower);
 }
