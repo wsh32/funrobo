@@ -2,8 +2,8 @@
 #include <Arduino.h>
 
 #define POT_PIN       A0
-#define RUDDER_PIN    0
-#define PROPS_PIN     0
+#define RUDDER_PIN    11
+#define PROPS_PIN     9
 #define TURNTABLE_PIN 5
 #define LED_PIN       0
 #define BUZZER_PIN    0

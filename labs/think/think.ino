@@ -24,6 +24,7 @@ Servo turntableServo;
 float kP_headingControl = 0.5;
 
 void setup() {
+  Serial.begin(9600);
   pinMode(POT_PIN, INPUT);
   rudderServo.attach(RUDDER_PIN);
   propsServo.attach(PROPS_PIN);
@@ -48,9 +49,9 @@ void loop() {
   float propsOutput = setVel(velCommand);
 
   // ACT
-  setRudder(rudderOutput, rudderServo);
+//  setRudder(rudderOutput, rudderServo);
   setProps(propsOutput, propsServo);
-  setTurntable(turntableOutput, turntableServo);
+//  setTurntable(turntableOutput, turntableServo);
 }
 
 // SENSE FUNCTIONS
@@ -120,7 +121,9 @@ void setProps(float propsPcnt, Servo propsServo) {
    * - propsPcnt: Value from -1 to 1
    * - propsServo: Initialized Servo class
    */
-   propsServo.write(map(propsPcnt, -1, 1, 0, 255));
+   int propPower = map(propsPcnt, -1, 1, 0, 255);
+   Serial.println(propPower);
+   propsServo.write(propPower);
 }
 
 void setTurntable(float turntablePcnt, Servo turntableServo) {
