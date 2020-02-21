@@ -13,9 +13,16 @@
 #define model 1080
 
 //Distance in meters from center of rotation to center of sensor array
-#define dist_cor_coIR .24765
+#define D1 .24765
 //Distance in meters from center of array to sensors
-#define dist_coIR_IR .05715
+#define D2 .05715
+
+//Define angles of IR sensors 
+#define PORT_90_ANG -90
+#define PORT_45_ANG -45
+#define BOW_ANG 0
+#define STARBOARD_45_ANG 45
+#define STARBOARD_90_ANG 90
 
 //Map width and height and resolution (cm)
 #define map_width = 250
@@ -23,8 +30,10 @@
 #define map_resolution 1
  
 // Sense functions
-// float[] solve_IR_dist
+int solve_IR(int irAngle, float *rotAngle, float *distance);
 int getIR(float *distances, size_t length);
+float degToRad(int deg);
+float radToDeg(float rad);
 
 //Think functions
 

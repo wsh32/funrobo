@@ -29,21 +29,41 @@ void setup() {
 }
 
 void loop() {
-  delay(500);
+  delay(2000);
 
   //Sense
   //Get current IR distances
-  Serial.println("Getting distances from IR: ");
+  Serial.println("*****Getting distances from IR*****");
   float dist_array[5] = {0,0,0,0,0};
   if (getIR(dist_array, 5) == -1) {
     Serial.println("Error getting distances from IR");
   }
-  for (int i = 0; i < 5; i++) {
-    Serial.println(dist_array[i]);
-  }
+
+  // Testing print out distances
+  Serial.print("Port 90: ");
+  Serial.println(dist_array[0]);
+  Serial.print("Port 45: ");
+  Serial.println(dist_array[1]);
+  Serial.print("Bow: ");
+  Serial.println(dist_array[2]);
+  Serial.print("Starboard 45: ");
+  Serial.println(dist_array[3]);
+  Serial.print("Port 90: ");
+  Serial.println(dist_array[4]);
   
+  Serial.println("*****Solving Distance and Angle from COR*******");
+  float angle_cor;
+  float d_cor;
+  solve_IR(PORT_45_ANG, dist_array[1], &angle_cor, &d_cor);
+  Serial.print("Distance (meters): ");
+  Serial.println(d_cor);
+  Serial.print("Angle (deg): ");
+  Serial.println(angle_cor);
+  Serial.println();
+  
+    
   //Get heading from team
-//  int heading = getHeading();
+  //int heading = getHeading();
   
   //Remap the points relative to the heaing to be applied to the map
   //Update map
@@ -54,7 +74,7 @@ void loop() {
 
 int getIR(float *distances, size_t length) {
   /*
-   * Get distances from IR sensor suite
+   * Get distances from IR sensor suite in meters
    * 
    * Parameters:
    * - distances: float array to hold distances
@@ -64,13 +84,42 @@ int getIR(float *distances, size_t length) {
     return -1;
   }
   
-  distances[0] = port90IR.distance();
-  distances[1] = port45IR.distance();
-  distances[2] = port90IR.distance();
-  distances[3] = starboard45IR.distance();
-  distances[4] = starboard90IR.distance();
+  distances[0] = port90IR.distance() / 100.0;
+  distances[1] = port45IR.distance() / 100.0;
+  distances[2] = bowIR.distance() / 100.0;
+  distances[3] = starboard45IR.distance() / 100.0;
+  distances[4] = starboard90IR.distance() / 100.0;
   return 0;
 }
+
+int solve_IR(float irAngle, float irDistance, float *rotAngle, float *distance) {
+  /*
+   * Determine angle and distance from center of rotation for a detected object
+   * 
+   * Coordinates are set such that N: 0deg, W: -90deg, E: 90deg
+   * 
+   * Parameters:
+   * - irAngle: angle of the IR sensor with respect to heading
+   * - length: size of the array
+   */
+  // Deterimine what side based on argument angle
+  int side = 0;
+  if (irAngle < 0) {
+    side = -1; // Port
+  }
+  else {
+    side = 1; // Starboard
+  }
+  
+  float angle = degToRad(90 + (90 - abs(irAngle)));
+  *distance = pow(irDistance + D2, 2) + pow(D1, 2) - 2 * D1 * (D2 + irDistance) * cos(angle); // Law of cosines
+  // TODO: Debug why getting closer increases the angle instead of decreases
+  *rotAngle = asin((sin(angle) * (irDistance + D2)) / (*distance)); // Law of sines
+  *rotAngle = radToDeg(*rotAngle * side);
+}
+
+float degToRad(float deg) { return deg * M_PI / 180; }
+float radToDeg(float rad) { return rad * 180 / M_PI; }
 
 //Think Functions
 
