@@ -112,10 +112,35 @@ int solve_IR(float irAngle, float irDistance, float *rotAngle, float *distance) 
   }
   
   float angle = degToRad(90 + (90 - abs(irAngle)));
-  float targetDistance = irDistance + D2;
-  *distance = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * targetDistance * cos(angle)); // Law of cosines
+  *distance = pow(irDistance + D2, 2) + pow(D1, 2) - 2 * D1 * (D2 + irDistance) * cos(angle); // Law of cosines
+  // TODO: Debug why getting closer increases the angle instead of decreases
   *rotAngle = asin((sin(angle) * (irDistance + D2)) / (*distance)); // Law of sines
   *rotAngle = radToDeg(*rotAngle * side);
+}
+
+float get_IR_dist(int IR_pin){
+  /* 
+   * Compute the distance from the IR sensor
+   * This uses the same setup as the SharpIR library but can
+   * be modified as need (different averaging or tweaking values)
+   * 
+   * The equation Distance = 29.988 X POW(Volt , -1.173) was derived
+   * by guillaume-rico
+   * 
+   * Parameters:
+   * - IR_pin: analog pin number of the IR sensor to be read from
+   */
+  float avg_dist = 0;
+  int count = 5;
+
+  //Get rolling average
+  for(int i = 0; i < count; i++){
+    float voltage = analogRead(IR_pin);
+    float dist = 29.988*pow(voltage, -1.173);
+    avg_dist += dist;
+  }
+  avg_dist /= count;
+  return avg_dist;
 }
 
 float degToRad(float deg) { return deg * M_PI / 180; }
