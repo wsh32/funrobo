@@ -1,0 +1,16 @@
+--2020-02-21 09:41:32--  https://l.messenger.com/l.php?u=https%3A%2F%2Fwww.makerguides.com%2Fwp-content%2Fuploads%2F2019%2F02%2FSharpIR-master.zip
+Loaded CA certificate '/etc/ssl/certs/ca-certificates.crt'
+Resolving l.messenger.com (l.messenger.com)... 31.13.71.1, 2a03:2880:f012:1:face:b00c:0:1
+Connecting to l.messenger.com (l.messenger.com)|31.13.71.1|:443... connected.
+GnuTLS: Resource temporarily unavailable, try again.
+GnuTLS: Resource temporarily unavailable, try again.
+HTTP request sent, awaiting response... 302 Found
+Location: https://www.messenger.com/unsupportedbrowser [following]
+--2020-02-21 09:41:32--  https://www.messenger.com/unsupportedbrowser
+Resolving www.messenger.com (www.messenger.com)... 31.13.71.1, 2a03:2880:f012:1:face:b00c:0:1
+Connecting to www.messenger.com (www.messenger.com)|31.13.71.1|:443... connected.
+GnuTLS: Resource temporarily unavailable, try again.
+GnuTLS: Resource temporarily unavailable, try again.
+HTTP request sent, awaiting response... 404 Not Found
+2020-02-21 09:41:33 ERROR 404: Not Found.
+

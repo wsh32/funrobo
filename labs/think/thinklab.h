@@ -10,6 +10,17 @@
 
 #define FILTER_GAIN 0.125
 
+// Sensor data structs
+struct SharpIRData {
+  int dist1, dist2, dist3, dist4, dist5;
+  float angle1, angle2, angle3, angle4, angle5;
+};
+
+struct PixyCamData {
+  int x, y, w, h, area;
+};
+
+// Command Structs
 struct HeadingCommand {
   float turntableCommand;
   int rudderCommand;
@@ -17,6 +28,8 @@ struct HeadingCommand {
 
 // Sense functions
 float getHeading(float lastHeading);
+SharpIRData getSharpIR();
+PixyCamData getPixyCam();
 
 // Think functions
 
