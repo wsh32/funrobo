@@ -23,13 +23,11 @@
 #define map_resolution 1
  
 // Sense functions
-float[] solve_IR_dist
-float[] update_map(float[] ir_readings;)
+// float[] solve_IR_dist
+int getIR(float *distances, size_t length);
 
 //Think functions
 
 //Act functions
 
 //Controller functions
-
-
