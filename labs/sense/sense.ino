@@ -112,8 +112,8 @@ int solve_IR(float irAngle, float irDistance, float *rotAngle, float *distance) 
   }
   
   float angle = degToRad(90 + (90 - abs(irAngle)));
-  *distance = pow(irDistance + D2, 2) + pow(D1, 2) - 2 * D1 * (D2 + irDistance) * cos(angle); // Law of cosines
-  // TODO: Debug why getting closer increases the angle instead of decreases
+  float targetDistance = irDistance + D2;
+  *distance = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * targetDistance * cos(angle)); // Law of cosines
   *rotAngle = asin((sin(angle) * (irDistance + D2)) / (*distance)); // Law of sines
   *rotAngle = radToDeg(*rotAngle * side);
 }

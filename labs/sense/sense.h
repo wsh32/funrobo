@@ -1,4 +1,3 @@
-#include <SharpIR.h>
 #include <Arduino.h>
 #include <math.h>
 
