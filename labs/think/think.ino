@@ -5,7 +5,7 @@
  * David Tarazi
  * Wesley Soo-Hoo
  * Samuel Cabrera Valencia
- * Forian Michael Schwarzinger
+ * Florian Michael Schwarzinger
  * Richard Gao
  * Ben Ziemann
  * 
@@ -13,9 +13,16 @@
 
 #include "thinklab.h"
 #include <Servo.h>
+#include <SharpIR.h>
+
+//Setup IR sensors, pins found in thinklab.h
+SharpIR port90IR = SharpIR(PORT_90_IR_PIN, model);
+SharpIR port45IR = SharpIR(PORT_45_IR_PIN, model);
+SharpIR bowIR = SharpIR(BOW_IR_PIN, model);
+SharpIR starboard90IR = SharpIR(STARBOARD_45_IR_PIN, model);
+SharpIR starboard45IR = SharpIR(STARBOARD_90_IR_PIN, model);
 
 // Pin definitions in thinklab.h file
-
 Servo rudderServo;
 Servo propsServo;
 Servo turntableServo;
@@ -64,6 +71,78 @@ float getHeading(float lastHeading) {
   Serial.println(headingAngle);
   return headingAngle;
 }
+
+RawSharpIRData getIR() {
+  /*
+   * Get distances from IR sensor suite in meters
+   */
+  
+  RawSharpIRData rawData;
+  rawData.port90Dist = port90IR.distance() / 100.0;
+  rawData.port45Dist = port45IR.distance() / 100.0;
+  rawData.bowDist = bowIR.distance() / 100.0;
+  rawData.starboard45Dist = starboard45IR.distance() / 100.0;
+  rawData.starboard90Dist = starboard90IR.distance() / 100.0;
+  return rawData;
+}
+
+ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
+  /*
+   * Determine angle and distance from center of rotation for a detected object
+   * 
+   * Coordinates are set such that N: 0deg, W: -90deg, E: 90deg
+   * 
+   * Parameters:
+   * - irAngle: angle of the IR sensor with respect to heading
+   * - length: size of the array
+   */
+  // Deterimine what side based on argument angle
+  int side = 0;
+  if (irAngle < 0) {
+    side = -1; // Port
+  }
+  else {
+    side = 1; // Starboard
+  }
+  
+  float angle = degToRad(90 + (90 - abs(irAngle)));
+
+  ProcessedSharpIRData processedData;
+  processedData.distance = pow(irDistance + D2, 2) + pow(D1, 2) - 2 * D1 * (D2 + irDistance) * cos(angle); // Law of cosines
+  // TODO: Debug why getting closer increases the angle instead of decreases
+  processedData.rotAngle = asin((sin(angle) * (irDistance + D2)) / (*distance)); // Law of sines
+  processedData.rotAngle = radToDeg(*rotAngle * side);
+
+  return processedData;
+}
+
+float getIRDist(int pin){
+  /* 
+   * Compute the distance from the IR sensor
+   * This uses the same setup as the SharpIR library but can
+   * be modified as need (different averaging or tweaking values)
+   * 
+   * The equation Distance = 29.988 X POW(Volt , -1.173) was derived
+   * by guillaume-rico
+   * 
+   * Parameters:
+   * - IR_pin: analog pin number of the IR sensor to be read from
+   */
+  float avgDist = 0;
+  int count = 5;
+
+  //Get rolling average
+  for(int i = 0; i < count; i++){
+    float voltage = analogRead(pin);
+    float dist = 29.988*pow(voltage, -1.173);
+    avgDist += dist;
+  }
+  avgDist /= count;
+  return avgDist;
+}
+
+float degToRad(float deg) { return deg * M_PI / 180; }
+float radToDeg(float rad) { return rad * 180 / M_PI; }
 
 // CONTROLLER FUNCTIONS
 HeadingCommand setHeading(float headingCommand, float potPosition) {
