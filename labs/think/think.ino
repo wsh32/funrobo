@@ -16,11 +16,11 @@
 #include <SharpIR.h>
 
 //Setup IR sensors, pins found in thinklab.h
-SharpIR port90IR = SharpIR(PORT_90_IR_PIN, model);
-SharpIR port45IR = SharpIR(PORT_45_IR_PIN, model);
-SharpIR bowIR = SharpIR(BOW_IR_PIN, model);
-SharpIR starboard90IR = SharpIR(STARBOARD_45_IR_PIN, model);
-SharpIR starboard45IR = SharpIR(STARBOARD_90_IR_PIN, model);
+SharpIR port90IR = SharpIR(PORT_90_IR_PIN, MODEL);
+SharpIR port45IR = SharpIR(PORT_45_IR_PIN, MODEL);
+SharpIR bowIR = SharpIR(BOW_IR_PIN, MODEL);
+SharpIR starboard45IR = SharpIR(STARBOARD_45_IR_PIN, MODEL);
+SharpIR starboard90IR = SharpIR(STARBOARD_90_IR_PIN, MODEL);
 
 // Pin definitions in thinklab.h file
 Servo rudderServo;
@@ -31,8 +31,11 @@ Servo turntableServo;
 int kP_headingControl = 1.1;
 float heading = 0;
 
+SharpIRData ir_array;
+
 void setup() {
   Serial.begin(9600);
+  analogReference(DEFAULT);
   // pinMode(POT_PIN, INPUT);
   rudderServo.attach(RUDDER_PIN);
   propsServo.attach(PROPS_PIN);
@@ -40,10 +43,12 @@ void setup() {
 }
 
 void loop() {
+  delay(500);
   // SENSE
   // Get current heading
   heading = getHeading(heading);
-
+  updateIRArray();
+ 
   // THINK
   // TODO get commands from arbiter
   float headingCommandDegs = 0;
@@ -72,18 +77,24 @@ float getHeading(float lastHeading) {
   return headingAngle;
 }
 
-RawSharpIRData getIR() {
+void updateIRArray() {
   /*
    * Get distances from IR sensor suite in meters
    */
-  
-  RawSharpIRData rawData;
-  rawData.port90Dist = port90IR.distance() / 100.0;
-  rawData.port45Dist = port45IR.distance() / 100.0;
-  rawData.bowDist = bowIR.distance() / 100.0;
-  rawData.starboard45Dist = starboard45IR.distance() / 100.0;
-  rawData.starboard90Dist = starboard90IR.distance() / 100.0;
-  return rawData;
+
+  //Using SharpIR library
+  ir_array.port90Dist = port90IR.distance() / 100.0;
+  ir_array.port45Dist = port45IR.distance() / 100.0;
+  ir_array.bowDist = bowIR.distance() / 100.0;
+  ir_array.starboard45Dist = starboard45IR.distance() / 100.0;
+  ir_array.starboard90Dist = starboard90IR.distance() / 100.0;
+
+  //Using custom function
+//  ir_array.port90Dist = getIRDist(PORT_90_IR_PIN) / 100.0;
+//  ir_array.port45Dist = getIRDist(PORT_45_IR_PIN) / 100.0;
+//  ir_array.bowDist = getIRDist(BOW_IR_PIN) / 100.0;
+//  ir_array.starboard45Dist = getIRDist(STARBOARD_45_IR_PIN) / 100.0;
+//  ir_array.starboard90Dist = getIRDist(STARBOARD_90_IR_PIN) / 100.0;
 }
 
 ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
@@ -106,13 +117,13 @@ ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   }
   
   float angle = degToRad(90 + (90 - abs(irAngle)));
+  float targetDistance = irDistance + D2;
 
   ProcessedSharpIRData processedData;
-  processedData.distance = pow(irDistance + D2, 2) + pow(D1, 2) - 2 * D1 * (D2 + irDistance) * cos(angle); // Law of cosines
-  // TODO: Debug why getting closer increases the angle instead of decreases
-  processedData.rotAngle = asin((sin(angle) * (irDistance + D2)) / (*distance)); // Law of sines
-  processedData.rotAngle = radToDeg(*rotAngle * side);
-
+  processedData.distance = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * (targetDistance) * cos(angle)); // Law of cosines
+  processedData.rotAngle = asin((sin(angle) * (targetDistance)) / (processedData.distance)); // Law of sines
+  processedData.rotAngle = radToDeg(processedData.rotAngle * side);
+  
   return processedData;
 }
 
@@ -128,17 +139,18 @@ float getIRDist(int pin){
    * Parameters:
    * - IR_pin: analog pin number of the IR sensor to be read from
    */
-  float avgDist = 0;
-  int count = 5;
+   int count = 25;
+   int analog_val[count];
+   int dist;
 
-  //Get rolling average
-  for(int i = 0; i < count; i++){
-    float voltage = analogRead(pin);
-    float dist = 29.988*pow(voltage, -1.173);
-    avgDist += dist;
-  }
-  avgDist /= count;
-  return avgDist;
+   for (int i=0; i<count; i++){
+    analog_val[i] = analogRead(pin);
+   }
+   //Get median value
+   sort(analog_val, count);
+   
+   dist = 29.988 * pow(map(analog_val[count / 2], 0, 1023, 0, 5000)/1000.0, -1.173);
+   return dist;
 }
 
 float degToRad(float deg) { return deg * M_PI / 180; }
@@ -221,4 +233,22 @@ void setTurntable(float turntablePcnt, Servo turntableServo) {
    */
   int turntablePower = map(turntablePcnt, -100, 100, 0, 185);
   turntableServo.write(turntablePower);
+}
+
+void sort(int a[], int size) {
+  /*
+   * SharpIR library sort function
+   */
+  for(int i=0; i<(size-1); i++) {
+    bool flag = true;
+    for(int d=0; d<(size-(i+1)); d++) {
+      if(a[d] > a[d+1]) {
+        int t = a[d];
+        a[d] = a[d+1];
+        a[d+1] = t;
+        flag = false;
+      }
+    }
+  if (flag) break;
+  }
 }

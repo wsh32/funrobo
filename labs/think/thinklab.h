@@ -16,7 +16,7 @@
 #define BUZZER_PIN    0
 
 //Model of the Sharp IR sensor - 2Y0A21
-#define model 1080
+#define MODEL 1080
 //Distance in meters from center of rotation to center of sensor array
 #define D1 .24765
 //Distance in meters from center of array to sensors
@@ -32,6 +32,10 @@
 
 // Sensor data structs
 struct RawSharpIRData {
+  float port90Dist, port45Dist, bowDist, starboard45Dist, starboard90Dist;
+};
+
+struct SharpIRData {
   float port90Dist, port45Dist, bowDist, starboard45Dist, starboard90Dist;
 };
 
