@@ -2,5 +2,6 @@
 #include <Pixy.h>
 
 struct PixyCamData {
-  int x, y, w, h, a;
+  boolean isDetected;
+  float x, y, w, h, a, theta;
 };

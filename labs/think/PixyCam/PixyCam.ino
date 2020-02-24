@@ -2,7 +2,7 @@
 
 // This is the main Pixy object 
 Pixy pixy;
-PixyCamData data;
+PixyCamData pixyData;
 
 void setup()
 {
@@ -14,12 +14,19 @@ void setup()
 
 void loop()
 { 
-  whaleLock();  
+  camFindWhale();
+  if (pixyData.isDetected)
+  {
+    Serial.println("Detected");
+  }
+  else
+  {
+    Serial.println("Not detected");
+  }
 }
 
-void whaleLock()
+void camFindWhale()
 {
-  static int i = 0;
   uint16_t blocks;
   char buf[32];
   int mid_point = 319/2 + 1;
@@ -32,18 +39,16 @@ void whaleLock()
   // If there are detect blocks, print them!
   if (blocks)
   {
-    i++; 
-    // do this (print) every 50 frames because printing every
-    // frame would bog down the Arduino
-    if (i%25==0){
-      data.x = pixy.blocks[0].x;
-      data.y = pixy.blocks[0].y;
-      data.w = pixy.blocks[0].width;
-      data.h = pixy.blocks[0].height;
-      data.a = pixy.blocks[0].width * pixy.blocks[0].height;
-       
-      sprintf(buf, "x: %d\ny: %d\nwidth: %d\nheight: %d\narea: %d\n\n", data.x, data.y, data.w, data.h, data.a);
-      Serial.print(buf);
-    }
+    pixyData.isDetected = true;
+    pixyData.x = pixy.blocks[0].x;
+    pixyData.y = pixy.blocks[0].y;
+    pixyData.w = pixy.blocks[0].width;
+    pixyData.h = pixy.blocks[0].height;
+    pixyData.a = pixy.blocks[0].width * pixy.blocks[0].height;
+    pixyData.theta = ((pixy.blocks[0].x * 75)/319) - 37.5;
+  }
+  else
+  {
+    pixyData.isDetected = false;
   }
 }
