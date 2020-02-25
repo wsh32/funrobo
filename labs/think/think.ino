@@ -34,6 +34,8 @@ int kP_headingControl = 1.1;
 float heading = 0;
 
 SharpIRData ir_array;
+//Initialize threat array, no threats
+int avoid_array[5] = {1,1,1,1,1};
 
 void setup() {
   Serial.begin(9600);
@@ -52,7 +54,12 @@ void loop() {
   // Get current heading
   heading = getHeading(heading);
   updateIRArray();
- 
+  updateAvoidArray();
+
+  Serial.println("Threats");
+  for(int i = 0; i < 5; i++){
+    Serial.println(avoid_array[i]);
+  }
   // THINK
   // TODO get commands from arbiter
   float headingCommandDegs = 0;
@@ -77,7 +84,6 @@ float getHeading(float lastHeading) {
   
   // filter the potentiometer angle so it is smooth
   headingAngle = FILTER_GAIN * headingAngle + (1-FILTER_GAIN)*lastHeading;
-  Serial.println(headingAngle);
   return headingAngle;
 }
 
@@ -124,11 +130,54 @@ ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   float targetDistance = irDistance + D2;
 
   ProcessedSharpIRData processedData;
-  processedData.distance = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * (targetDistance) * cos(angle)); // Law of cosines
-  processedData.rotAngle = asin((sin(angle) * (targetDistance)) / (processedData.distance)); // Law of sines
+  processedData.dist = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * (targetDistance) * cos(angle)); // Law of cosines
+  processedData.rotAngle = asin((sin(angle) * (targetDistance)) / (processedData.dist)); // Law of sines
   processedData.rotAngle = radToDeg(processedData.rotAngle * side);
   
   return processedData;
+}
+
+void updateAvoidArray(){
+  /*
+   * Update the threat avoidance array
+   * 
+   * Threats range from 0 to 1 as a scaling factor to be applied to 
+   * other probabilities
+   */
+  ProcessedSharpIRData port_90_data = solveIR(PORT_90_IR_ANGLE, ir_array.port90Dist);
+  ProcessedSharpIRData port_45_data =solveIR(PORT_45_IR_ANGLE, ir_array.port45Dist);
+  ProcessedSharpIRData bow_data =solveIR(BOW_IR_ANGLE, ir_array.bowDist);
+  ProcessedSharpIRData starboard_45_data =solveIR(STARBOARD_45_IR_ANGLE, ir_array.starboard45Dist);
+  ProcessedSharpIRData starboard_90_data =solveIR(STARBOARD_90_IR_ANGLE, ir_array.starboard90Dist);
+
+  ProcessedSharpIRData sensor_suite[5] = {port_90_data, port_45_data, bow_data, starboard_45_data, starboard_90_data};
+  
+  //Create magnitudes of avoidance 
+  for(int i = 0; i < 5; i++){
+    ProcessedSharpIRData ir_processed = sensor_suite[i];
+  
+    //Correct for global heading data
+    ir_processed.rotAngle += heading;
+ 
+    int threat = 1;
+    float dist = ir_processed.dist;
+    //Outside our range, no threat
+    if (dist > D_MAX){
+      threat = 1;
+    }
+    //Within sensing distance, take caution
+    else if ((dist > D_MIN) && (dist < D_MAX)){
+      threat = (dist-D_MIN) / (D_MAX - D_MIN);
+    }
+    //Too close -- avoid immediately
+    else{
+      threat = 0;
+    }
+
+    //Add to threat assesment
+    avoid_array[i] = (int)threat*100;
+  }
+  
 }
 
 float getIRDist(int pin){
@@ -246,9 +295,7 @@ void setProps(int propsPcnt, Servo propsServo) {
    * - propsServo: Initialized Servo class
    */
   // map raw velocity command to motor power
-  Serial.println(propsPcnt);
   int propPower = map(propsPcnt, 0, 100, 0, 255);
-  Serial.println(propPower);
   propsServo.write(propPower);
 }
 
@@ -267,6 +314,7 @@ void setTurntable(float turntablePcnt, Servo turntableServo) {
 void sort(int a[], int size) {
   /*
    * SharpIR library sort function
+   * Low to high, min to max sort
    */
   for(int i=0; i<(size-1); i++) {
     bool flag = true;
