@@ -15,12 +15,11 @@
 #include <Servo.h>
 #include <SharpIR.h>
 
-//Setup IR sensors, pins found in thinklab.h
-SharpIR port90IR = SharpIR(PORT_90_IR_PIN, MODEL);
-SharpIR port45IR = SharpIR(PORT_45_IR_PIN, MODEL);
-SharpIR bowIR = SharpIR(BOW_IR_PIN, MODEL);
-SharpIR starboard45IR = SharpIR(STARBOARD_45_IR_PIN, MODEL);
-SharpIR starboard90IR = SharpIR(STARBOARD_90_IR_PIN, MODEL);
+SharpIR port90IR(PORT_90_IR_PIN, MODEL);
+SharpIR port45IR(PORT_45_IR_PIN, MODEL);
+SharpIR bowIR(BOW_IR_PIN, MODEL);
+SharpIR starboard45IR(STARBOARD_45_IR_PIN, MODEL);
+SharpIR starboard90IR(STARBOARD_90_IR_PIN, MODEL);
 
 // Pin definitions in thinklab.h file
 Servo rudderServo;
@@ -33,12 +32,9 @@ PixyCamData pixyData;
 int kP_headingControl = 1.1;
 float heading = 0;
 
-SharpIRData ir_array;
-
 void setup() {
   Serial.begin(9600);
   analogReference(DEFAULT);
-  // pinMode(POT_PIN, INPUT);
   rudderServo.attach(RUDDER_PIN);
   propsServo.attach(PROPS_PIN);
   turntableServo.attach(TURNTABLE_PIN);
@@ -47,12 +43,11 @@ void setup() {
 }
 
 void loop() {
-  delay(500);
   // SENSE
   // Get current heading
   heading = getHeading(heading);
-  updateIRArray();
- 
+  RawSharpIRData irData = getIR();
+
   // THINK
   // TODO get commands from arbiter
   float headingCommandDegs = 0;
@@ -81,24 +76,20 @@ float getHeading(float lastHeading) {
   return headingAngle;
 }
 
-void updateIRArray() {
+RawSharpIRData getIR() {
   /*
    * Get distances from IR sensor suite in meters
    */
-
-  //Using SharpIR library
-  ir_array.port90Dist = port90IR.distance() / 100.0;
-  ir_array.port45Dist = port45IR.distance() / 100.0;
-  ir_array.bowDist = bowIR.distance() / 100.0;
-  ir_array.starboard45Dist = starboard45IR.distance() / 100.0;
-  ir_array.starboard90Dist = starboard90IR.distance() / 100.0;
+  RawSharpIRData rawData;
 
   //Using custom function
-//  ir_array.port90Dist = getIRDist(PORT_90_IR_PIN) / 100.0;
-//  ir_array.port45Dist = getIRDist(PORT_45_IR_PIN) / 100.0;
-//  ir_array.bowDist = getIRDist(BOW_IR_PIN) / 100.0;
-//  ir_array.starboard45Dist = getIRDist(STARBOARD_45_IR_PIN) / 100.0;
-//  ir_array.starboard90Dist = getIRDist(STARBOARD_90_IR_PIN) / 100.0;
+  rawData.port90Dist = getIRDist(PORT_90_IR_PIN) / 100.0;
+  rawData.port45Dist = getIRDist(PORT_45_IR_PIN) / 100.0;
+  rawData.bowDist = getIRDist(BOW_IR_PIN) / 100.0;
+  rawData.starboard45Dist = getIRDist(STARBOARD_45_IR_PIN) / 100.0;
+  rawData.starboard90Dist = getIRDist(STARBOARD_90_IR_PIN) / 100.0;
+
+  return rawData;
 }
 
 ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
@@ -127,7 +118,7 @@ ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   processedData.distance = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * (targetDistance) * cos(angle)); // Law of cosines
   processedData.rotAngle = asin((sin(angle) * (targetDistance)) / (processedData.distance)); // Law of sines
   processedData.rotAngle = radToDeg(processedData.rotAngle * side);
-  
+
   return processedData;
 }
 
@@ -143,18 +134,18 @@ float getIRDist(int pin){
    * Parameters:
    * - IR_pin: analog pin number of the IR sensor to be read from
    */
-   int count = 25;
-   int analog_val[count];
-   int dist;
+  int count = 25;
+  int analog_val[count];
+  int dist;
 
-   for (int i=0; i<count; i++){
+  for (int i=0; i<count; i++){
     analog_val[i] = analogRead(pin);
-   }
-   //Get median value
-   sort(analog_val, count);
-   
-   dist = 29.988 * pow(map(analog_val[count / 2], 0, 1023, 0, 5000)/1000.0, -1.173);
-   return dist;
+  }
+  //Get median value
+  sort(analog_val, count);
+
+  dist = 29.988 * pow(map(analog_val[count / 2], 0, 1023, 0, 5000)/1000.0, -1.173);
+  return dist;
 }
 
 float degToRad(float deg) { return deg * M_PI / 180; }

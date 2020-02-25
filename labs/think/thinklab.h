@@ -37,10 +37,6 @@ struct RawSharpIRData {
   float port90Dist, port45Dist, bowDist, starboard45Dist, starboard90Dist;
 };
 
-struct SharpIRData {
-  float port90Dist, port45Dist, bowDist, starboard45Dist, starboard90Dist;
-};
-
 struct ProcessedSharpIRData {
   // rotAngle in degrees
   float distance, rotAngle;
@@ -66,7 +62,6 @@ float degToRad(int deg);
 float radToDeg(float rad);
 
 float getHeading(float lastHeading);
-SharpIRData getSharpIR();
 PixyCamData getPixyCam();
 
 // Think functions
