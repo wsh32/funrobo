@@ -59,9 +59,9 @@ void loop() {
 
   // THINK
   // Behaviors
-  avoid(irData);
-  hunt(pixyData);
-  follow(pixyData);
+  avoid(irData, heading);
+  hunt(pixyData, heading);
+  follow(pixyData, heading);
 
   Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt, headingWeightsFollow, velWeightFollow);
   float headingCommandDegs = command.heading;
@@ -191,7 +191,7 @@ PixyCamData getPixyCam(Pixy cam) {
 }
 
 // THINK FUNCTIONS
-void avoid(RawSharpIRData irRawData) {
+void avoid(RawSharpIRData irRawData, float heading) {
   /**
    * Avoid behavior
    * 
@@ -202,7 +202,7 @@ void avoid(RawSharpIRData irRawData) {
    */
 }
 
-void hunt(PixyCamData pixyCamData) {
+void hunt(PixyCamData pixyCamData, float heading) {
   /**
    * Hunt behavior
    * 
@@ -214,7 +214,7 @@ void hunt(PixyCamData pixyCamData) {
   
 }
 
-void follow(PixyCamData pixyCamData) {
+void follow(PixyCamData pixyCamData, float heading) {
   /**
    * Follow behavior
    * 

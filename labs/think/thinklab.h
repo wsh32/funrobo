@@ -75,9 +75,9 @@ PixyCamData getPixyCam();
 
 // Think functions
 // Behaviors
-void avoid(RawSharpIRData irRawData);
-void hunt(PixyCamData pixyCamData);
-void follow(PixyCamData pixyCamData);
+void avoid(RawSharpIRData irRawData, float heading);
+void hunt(PixyCamData pixyCamData, float heading);
+void follow(PixyCamData pixyCamData, float heading);
 
 // Arbiter
 Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt, int headingFollow[], int velFollow);
