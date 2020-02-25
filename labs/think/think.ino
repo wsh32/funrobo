@@ -43,6 +43,7 @@ void loop() {
   // SENSE
   // Get current heading
   heading = getHeading(heading);
+  RawSharpIRData irData = getIR();
 
   // THINK
   // TODO get commands from arbiter
@@ -110,8 +111,8 @@ ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   ProcessedSharpIRData processedData;
   processedData.distance = pow(irDistance + D2, 2) + pow(D1, 2) - 2 * D1 * (D2 + irDistance) * cos(angle); // Law of cosines
   // TODO: Debug why getting closer increases the angle instead of decreases
-  processedData.rotAngle = asin((sin(angle) * (irDistance + D2)) / (*distance)); // Law of sines
-  processedData.rotAngle = radToDeg(*rotAngle * side);
+  processedData.rotAngle = asin((sin(angle) * (irDistance + D2)) / (processedData.distance)); // Law of sines
+  processedData.rotAngle = radToDeg(processedData.rotAngle * side);
 
   return processedData;
 }

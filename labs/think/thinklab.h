@@ -58,7 +58,6 @@ float degToRad(int deg);
 float radToDeg(float rad);
 
 float getHeading(float lastHeading);
-SharpIRData getSharpIR();
 PixyCamData getPixyCam();
 
 // Think functions
