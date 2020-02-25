@@ -13,9 +13,16 @@
 
 #include "thinklab.h"
 #include <Servo.h>
+#include <SharpIR.h>
+
+//Setup IR sensors, pins found in thinklab.h
+SharpIR port90IR = SharpIR(PORT_90_IR_PIN, MODEL);
+SharpIR port45IR = SharpIR(PORT_45_IR_PIN, MODEL);
+SharpIR bowIR = SharpIR(BOW_IR_PIN, MODEL);
+SharpIR starboard45IR = SharpIR(STARBOARD_45_IR_PIN, MODEL);
+SharpIR starboard90IR = SharpIR(STARBOARD_90_IR_PIN, MODEL);
 
 // Pin definitions in thinklab.h file
-
 Servo rudderServo;
 Servo propsServo;
 Servo turntableServo;
@@ -26,8 +33,11 @@ PixyCamData pixyData;
 int kP_headingControl = 1.1;
 float heading = 0;
 
+SharpIRData ir_array;
+
 void setup() {
   Serial.begin(9600);
+  analogReference(DEFAULT);
   // pinMode(POT_PIN, INPUT);
   rudderServo.attach(RUDDER_PIN);
   propsServo.attach(PROPS_PIN);
@@ -37,10 +47,12 @@ void setup() {
 }
 
 void loop() {
+  delay(500);
   // SENSE
   // Get current heading
   heading = getHeading(heading);
-
+  updateIRArray();
+ 
   // THINK
   // TODO get commands from arbiter
   float headingCommandDegs = 0;
@@ -69,6 +81,85 @@ float getHeading(float lastHeading) {
   return headingAngle;
 }
 
+void updateIRArray() {
+  /*
+   * Get distances from IR sensor suite in meters
+   */
+
+  //Using SharpIR library
+  ir_array.port90Dist = port90IR.distance() / 100.0;
+  ir_array.port45Dist = port45IR.distance() / 100.0;
+  ir_array.bowDist = bowIR.distance() / 100.0;
+  ir_array.starboard45Dist = starboard45IR.distance() / 100.0;
+  ir_array.starboard90Dist = starboard90IR.distance() / 100.0;
+
+  //Using custom function
+//  ir_array.port90Dist = getIRDist(PORT_90_IR_PIN) / 100.0;
+//  ir_array.port45Dist = getIRDist(PORT_45_IR_PIN) / 100.0;
+//  ir_array.bowDist = getIRDist(BOW_IR_PIN) / 100.0;
+//  ir_array.starboard45Dist = getIRDist(STARBOARD_45_IR_PIN) / 100.0;
+//  ir_array.starboard90Dist = getIRDist(STARBOARD_90_IR_PIN) / 100.0;
+}
+
+ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
+  /*
+   * Determine angle and distance from center of rotation for a detected object
+   * 
+   * Coordinates are set such that N: 0deg, W: -90deg, E: 90deg
+   * 
+   * Parameters:
+   * - irAngle: angle of the IR sensor with respect to heading
+   * - length: size of the array
+   */
+  // Deterimine what side based on argument angle
+  int side = 0;
+  if (irAngle < 0) {
+    side = -1; // Port
+  }
+  else {
+    side = 1; // Starboard
+  }
+  
+  float angle = degToRad(90 + (90 - abs(irAngle)));
+  float targetDistance = irDistance + D2;
+
+  ProcessedSharpIRData processedData;
+  processedData.distance = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * (targetDistance) * cos(angle)); // Law of cosines
+  processedData.rotAngle = asin((sin(angle) * (targetDistance)) / (processedData.distance)); // Law of sines
+  processedData.rotAngle = radToDeg(processedData.rotAngle * side);
+  
+  return processedData;
+}
+
+float getIRDist(int pin){
+  /* 
+   * Compute the distance from the IR sensor
+   * This uses the same setup as the SharpIR library but can
+   * be modified as need (different averaging or tweaking values)
+   * 
+   * The equation Distance = 29.988 X POW(Volt , -1.173) was derived
+   * by guillaume-rico
+   * 
+   * Parameters:
+   * - IR_pin: analog pin number of the IR sensor to be read from
+   */
+   int count = 25;
+   int analog_val[count];
+   int dist;
+
+   for (int i=0; i<count; i++){
+    analog_val[i] = analogRead(pin);
+   }
+   //Get median value
+   sort(analog_val, count);
+   
+   dist = 29.988 * pow(map(analog_val[count / 2], 0, 1023, 0, 5000)/1000.0, -1.173);
+   return dist;
+}
+
+float degToRad(float deg) { return deg * M_PI / 180; }
+float radToDeg(float rad) { return rad * 180 / M_PI; }
+
 void camFindWhale()
 {
   uint16_t blocks;
@@ -93,7 +184,6 @@ void camFindWhale()
     pixyData.isDetected = false;
   }
 }
-
 
 // CONTROLLER FUNCTIONS
 HeadingCommand setHeading(float headingCommand, float potPosition) {
@@ -172,4 +262,22 @@ void setTurntable(float turntablePcnt, Servo turntableServo) {
    */
   int turntablePower = map(turntablePcnt, -100, 100, 0, 185);
   turntableServo.write(turntablePower);
+}
+
+void sort(int a[], int size) {
+  /*
+   * SharpIR library sort function
+   */
+  for(int i=0; i<(size-1); i++) {
+    bool flag = true;
+    for(int d=0; d<(size-(i+1)); d++) {
+      if(a[d] > a[d+1]) {
+        int t = a[d];
+        a[d] = a[d+1];
+        a[d+1] = t;
+        flag = false;
+      }
+    }
+  if (flag) break;
+  }
 }

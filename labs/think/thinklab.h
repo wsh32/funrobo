@@ -1,8 +1,15 @@
-#include <Servo.h>
 #include <Arduino.h>
+#include <Servo.h>
+#include <math.h>
 #include <SPI.h>
 #include <Pixy.h>
 
+//Pins
+#define PORT_90_IR_PIN      A1
+#define PORT_45_IR_PIN       A2
+#define BOW_IR_PIN           A3
+#define STARBOARD_45_IR_PIN  A4
+#define STARBOARD_90_IR_PIN  A5
 #define POT_PIN       A0
 #define RUDDER_PIN    11
 #define PROPS_PIN     9
@@ -10,12 +17,33 @@
 #define LED_PIN       0
 #define BUZZER_PIN    0
 
+//Model of the Sharp IR sensor - 2Y0A21
+#define MODEL 1080
+//Distance in meters from center of rotation to center of sensor array
+#define D1 .24765
+//Distance in meters from center of array to sensors
+#define D2 .05715
+
+//Map width and height and resolution (cm)
+#define map_width  250
+#define map_height 250
+#define map_resolution 1
+
+// Filter gain for heading potentiometer
 #define FILTER_GAIN 0.125
 
 // Sensor data structs
+struct RawSharpIRData {
+  float port90Dist, port45Dist, bowDist, starboard45Dist, starboard90Dist;
+};
+
 struct SharpIRData {
-  int dist1, dist2, dist3, dist4, dist5;
-  float angle1, angle2, angle3, angle4, angle5;
+  float port90Dist, port45Dist, bowDist, starboard45Dist, starboard90Dist;
+};
+
+struct ProcessedSharpIRData {
+  // rotAngle in degrees
+  float distance, rotAngle;
 };
 
 // PixyCam data structs
@@ -31,6 +59,12 @@ struct HeadingCommand {
 };
 
 // Sense functions
+ProcessedSharpIRData solveIR(int irAngle, float irDistance);
+RawSharpIRData getIR(float *distances, size_t length);
+float getIRDist(int pin);
+float degToRad(int deg);
+float radToDeg(float rad);
+
 float getHeading(float lastHeading);
 SharpIRData getSharpIR();
 PixyCamData getPixyCam();
