@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <Servo.h>
 #include <math.h>
+#include <SPI.h>
+#include <Pixy.h>
 
 //Pins
 #define PORT_90_IR_PIN      A1
@@ -44,8 +46,10 @@ struct ProcessedSharpIRData {
   float distance, rotAngle;
 };
 
+// PixyCam data structs
 struct PixyCamData {
-  int x, y, w, h, area;
+  boolean isDetected;
+  float x, y, w, h, a, theta;
 };
 
 // Command Structs
