@@ -26,11 +26,19 @@ Servo rudderServo;
 Servo propsServo;
 Servo turntableServo;
 Pixy pixy;
-PixyCamData pixyData;
 
 // P control for turntable
 int kP_headingControl = 1.1;
 float heading = 0;
+
+// data buffers for commands
+const int headingSize = (MAX_HEADING - MIN_HEADING) / STEP_HEADING;
+int headingWeightsAvoid[headingSize];
+int headingWeightsHunt[headingSize];
+int headingWeightsFollow[headingSize];
+int velWeightAvoid = 0;
+int velWeightHunt = 0;
+int velWeightFollow = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -47,11 +55,17 @@ void loop() {
   // Get current heading
   heading = getHeading(heading);
   RawSharpIRData irData = getIR();
+  PixyCamData pixyData = getPixyCam(pixy);
 
   // THINK
-  // TODO get commands from arbiter
-  float headingCommandDegs = 0;
-  int velCommand = 10;
+  // Behaviors
+  avoid(irData);
+  hunt(pixyData);
+  follow(pixyData);
+
+  Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt, headingWeightsFollow, velWeightFollow);
+  float headingCommandDegs = command.heading;
+  int velCommand = command.vel;
 
   // CONTROLLER
   HeadingCommand headingOutput = setHeading(headingCommandDegs, heading);
@@ -151,17 +165,17 @@ float getIRDist(int pin){
 float degToRad(float deg) { return deg * M_PI / 180; }
 float radToDeg(float rad) { return rad * 180 / M_PI; }
 
-void camFindWhale()
-{
+PixyCamData getPixyCam(Pixy cam) {
+  PixyCamData pixyData;
+
   uint16_t blocks;
   int mid_point = 319/2 + 1;
 
 
-  blocks = pixy.getBlocks();
+  blocks = cam.getBlocks();
   
   // If blocks are detected, update struct
-  if (blocks)
-  {
+  if (blocks) {
     pixyData.isDetected = true;
     pixyData.x = pixy.blocks[0].x;
     pixyData.y = pixy.blocks[0].y;
@@ -169,12 +183,56 @@ void camFindWhale()
     pixyData.h = pixy.blocks[0].height;
     pixyData.a = pixy.blocks[0].width * pixy.blocks[0].height;
     pixyData.theta = ((pixy.blocks[0].x * 75)/319) - 37.5;
-  }
-  else
-  {
+  } else {
     pixyData.isDetected = false;
   }
+
+  return pixyData;
 }
+
+// THINK FUNCTIONS
+void avoid(RawSharpIRData irRawData) {
+  /**
+   * Avoid behavior
+   * 
+   * Sets values into headingWeightsAvoid and velWeightAvoid global variables
+   * 
+   * Parameters:
+   * - irRawData: Raw Sharp IR data
+   */
+}
+
+void hunt(PixyCamData pixyCamData) {
+  /**
+   * Hunt behavior
+   * 
+   * Sets values into headingWeightsHunt and velWeightHunt global variables
+   * 
+   * Parameters:
+   * - pixyCamData: Biggest blob from the Pixy Cam
+   */
+  
+}
+
+void follow(PixyCamData pixyCamData) {
+  /**
+   * Follow behavior
+   * 
+   * Sets values into headingWeightsFollow and velWeightFollow global variables
+   * 
+   * Parameters:
+   * - pixyCamData: Biggest blob from the Pixy Cam
+   */
+  
+}
+
+
+Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt, int headingFollow[], int velFollow) {
+  Command c;
+
+  return c;
+}
+
 
 // CONTROLLER FUNCTIONS
 HeadingCommand setHeading(float headingCommand, float potPosition) {
