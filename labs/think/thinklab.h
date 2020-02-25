@@ -37,6 +37,10 @@
 #define MAX_HEADING   90
 #define STEP_HEADING  5
 
+// Arbiter weights
+#define AVOID_WEIGHT 1
+#define HUNT_WEIGHT  1
+
 // Sensor data structs
 struct RawSharpIRData {
   float port90Dist, port45Dist, bowDist, starboard45Dist, starboard90Dist;
@@ -76,8 +80,8 @@ PixyCamData getPixyCam();
 // Think functions
 // Behaviors
 void avoid(RawSharpIRData irRawData, float heading, int headingWeightsAvoid[]);
-void hunt(float heading, int headingWeightsHunt[], boolean dir);
-void follow(float heading, int headingWeightsHunt[]);
+void hunt(float heading, boolean dir, int headingWeightsHunt[], int velWeightHunt);
+void follow(float heading, int headingWeightsHunt[], int velWeightHunt);
 
 // Arbiter
 Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt);

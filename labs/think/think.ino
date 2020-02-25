@@ -38,7 +38,6 @@ int headingWeightsHunt[headingSize] = {0};
 float desiredAvg = 100;
 int velWeightAvoid = 0;
 int velWeightHunt = 0;
-int velWeightFollow = 0;
 boolean dir;
 
 void setup() {
@@ -63,10 +62,10 @@ void loop() {
   // always run avoid, but choose between follow and hunt based on whether or not we found the narwal
   avoid(irData, heading, headingWeightsAvoid);
   if (pixyData.isDetected){
-    follow(heading, headingWeightsHunt);
+    follow(heading, headingWeightsHunt, velWeightHunt);
   }
   else {
-    hunt(heading, headingWeightsHunt, dir);
+    hunt(heading, dir, headingWeightsHunt, velWeightHunt);
   }
   
   Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt);
@@ -194,7 +193,7 @@ PixyCamData getPixyCam(Pixy cam) {
   }
 
   return pixyData;
-}-
+}
 
 // THINK FUNCTIONS
 void avoid(RawSharpIRData irRawData, float heading, int headingWeightsAvoid[]) {
@@ -208,7 +207,7 @@ void avoid(RawSharpIRData irRawData, float heading, int headingWeightsAvoid[]) {
    */
 }
 
-void hunt(float heading, int headingWeightsHunt[], boolean dir) {
+void hunt(float heading, boolean dir, int headingWeightsHunt[], int velWeightHunt) {
   /**
    * Hunt behavior
    * 
@@ -218,38 +217,38 @@ void hunt(float heading, int headingWeightsHunt[], boolean dir) {
    * - pixyCamData: Biggest blob from the Pixy Cam
    * - dir: false is left, true is right - last moving direction
    */
-   // switch direction if reaching end 
-   if (heading > 75){
-     dir = false;
-   }
-   else if (heading < -75) {
-     dir = true;
-   }
-   
-   for (int i = 0; i < headingSize; i++) {
-     // if moving right
-     if (dir) {
-       if (i*5-90 > heading) {
-         headingWeightsHunt[i] = 100;
-       }
-       else {
-         headingWeightsHunt[i] = 0;
-       }
-     }
-     // if moving left assign 100 to all weights left of the
-     else {
-       if (i*5-90 < heading) {
-         headingWeightsHunt[i] = 100;
-       }
-       else {
-         headingWeightsHunt[i] = 0;
-       }
-     }
-   }
-   normalize(headingWeightsHunt, desiredAvg);
+  // switch direction if reaching end 
+  if (heading > 75){
+    dir = false;
+  }
+    else if (heading < -75) {
+    dir = true;
+  }
+  
+  for (int i = 0; i < headingSize; i++) {
+    // if moving right
+    if (dir) {
+      if (i*5-90 > heading) {
+        headingWeightsHunt[i] = 100;
+      } else {
+        headingWeightsHunt[i] = 0;
+      }
+    }
+    // if moving left assign 100 to all weights left of the
+    else {
+      if (i*5-90 < heading) {
+        headingWeightsHunt[i] = 100;
+      } else {
+        headingWeightsHunt[i] = 0;
+      }
+    }
+  }
+  normalize(headingWeightsHunt, desiredAvg);
+  
+  velWeightHunt = 50;
 }
 
-void follow(float heading, int headingWeightsHunt[]) {
+void follow(float heading, int headingWeightsHunt[], int velWeightHunt) {
   /**
    * Follow behavior
    * 
@@ -264,8 +263,14 @@ void follow(float heading, int headingWeightsHunt[]) {
 
 Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt) {
   Command c;
-  
-  
+  int headingSum[headingSize];
+  for (int i = 0; i < headingSize; i++) {
+    headingSum[i] = headingAvoid[i] * AVOID_WEIGHT + headingHunt[i] * HUNT_WEIGHT;
+  }
+
+  sort(headingSum, headingSize);
+  c.heading = headingSum[headingSize - 1];
+  c.vel = (velAvoid * AVOID_WEIGHT + velHunt * HUNT_WEIGHT) / 2;
   return c;
 }
 
