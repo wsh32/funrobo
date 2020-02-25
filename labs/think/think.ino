@@ -5,7 +5,7 @@
  * David Tarazi
  * Wesley Soo-Hoo
  * Samuel Cabrera Valencia
- * Forian Michael Schwarzinger
+ * Florian Schwarzinger
  * Richard Gao
  * Ben Ziemann
  * 
@@ -19,6 +19,8 @@
 Servo rudderServo;
 Servo propsServo;
 Servo turntableServo;
+Pixy pixy;
+PixyCamData pixyData;
 
 // P control for turntable
 int kP_headingControl = 1.1;
@@ -30,6 +32,8 @@ void setup() {
   rudderServo.attach(RUDDER_PIN);
   propsServo.attach(PROPS_PIN);
   turntableServo.attach(TURNTABLE_PIN);
+
+  pixy.init();
 }
 
 void loop() {
@@ -64,6 +68,32 @@ float getHeading(float lastHeading) {
   Serial.println(headingAngle);
   return headingAngle;
 }
+
+void camFindWhale()
+{
+  uint16_t blocks;
+  int mid_point = 319/2 + 1;
+
+
+  blocks = pixy.getBlocks();
+  
+  // If blocks are detected, update struct
+  if (blocks)
+  {
+    pixyData.isDetected = true;
+    pixyData.x = pixy.blocks[0].x;
+    pixyData.y = pixy.blocks[0].y;
+    pixyData.w = pixy.blocks[0].width;
+    pixyData.h = pixy.blocks[0].height;
+    pixyData.a = pixy.blocks[0].width * pixy.blocks[0].height;
+    pixyData.theta = ((pixy.blocks[0].x * 75)/319) - 37.5;
+  }
+  else
+  {
+    pixyData.isDetected = false;
+  }
+}
+
 
 // CONTROLLER FUNCTIONS
 HeadingCommand setHeading(float headingCommand, float potPosition) {

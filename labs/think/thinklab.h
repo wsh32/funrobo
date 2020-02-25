@@ -1,5 +1,7 @@
 #include <Servo.h>
 #include <Arduino.h>
+#include <SPI.h>
+#include <Pixy.h>
 
 #define POT_PIN       A0
 #define RUDDER_PIN    11
@@ -16,8 +18,10 @@ struct SharpIRData {
   float angle1, angle2, angle3, angle4, angle5;
 };
 
+// PixyCam data structs
 struct PixyCamData {
-  int x, y, w, h, area;
+  boolean isDetected;
+  float x, y, w, h, a, theta;
 };
 
 // Command Structs
