@@ -33,7 +33,8 @@ float heading = 0;
 
 // data buffers for commands
 const int headingSize = (MAX_HEADING - MIN_HEADING) / STEP_HEADING;
-int headingWeightsAvoid[headingSize];
+
+int headingWeightsAvoid[headingSize] = {0};
 int headingWeightsHunt[headingSize] = {0};
 float desiredAvg = 100;
 int velWeightAvoid = 0;
@@ -151,7 +152,6 @@ PixyCamData getPixyCam(Pixy cam) {
 
   uint16_t blocks;
   int mid_point = 319/2 + 1;
-
 
   blocks = cam.getBlocks();
   
@@ -292,12 +292,35 @@ void follow(float heading, int headingWeightsHunt[], int velWeightHunt) {
   /**
    * Follow behavior
    * 
-   * Sets values into headingWeightsFollow and velWeightFollow global variables
+   * Sets values into headingWeightsHunt and velWeightHunt global variables
    * 
    * Parameters:
    * - pixyCamData: Biggest blob from the Pixy Cam
+   * - heading: Boat heading
    */
-  
+
+  int mainIndex;
+  if (pixyCamData.isDetected){
+    // Clear weights
+    headingWeightsHunt[avoidLastMainIndex] = 0;
+    headingWeightsHunt[avoidLastMainIndex - 1] = 0;
+    headingWeightsHunt[avoidLastMainIndex + 1] = 0;
+
+    mainIndex = mapFloat(pixyCamData.x, -40, 40, 10, 26);
+    mainIndex += mapFloat(heading, -90, 90, 0, headingSize);
+    mainIndex = min(max(mainIndex, 1), headingSize - 1);
+    headingWeightsHunt[mainIndex] = 70;
+    headingWeightsHunt[mainIndex+1] = 15;
+    headingWeightsHunt[mainIndex-1] = 15;
+  }
+
+  avoidLastMainIndex = mainIndex;
+}
+
+//FOLLOW SUB-FUNCTIONS
+int mapFloat(float x, float in_min, float in_max, float out_min, float out_max) {
+  x = x + 2.5;
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
 
