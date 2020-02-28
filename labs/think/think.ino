@@ -42,6 +42,8 @@ int velWeightHunt = 0;
 boolean dir = false;
 int avoidLastMainIndex = headingSize / 2;
 
+float pixyDecay = 0;
+
 //Initialize threat array, no threats
 int consistent_count[5] = {0,0,0,0,0}; //Consistency counter for nothing in IR
 float consistent_dist[5] = {0,0,0,0,0};
@@ -67,7 +69,6 @@ void loop() {
   // Behaviors
   // always run avoid, but choose between follow and hunt based on whether or not we found the narwal
   avoid(irData, heading);
-  Serial.println(pixyData.isDetected);
   if (pixyData.isDetected){
     follow(pixyData, heading);
   }
@@ -78,11 +79,20 @@ void loop() {
   Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt);
   float headingCommandDegs = command.heading;
   int velCommand = command.vel;
+//  Serial.println(heading);
+//   Serial.println(headingCommandDegs);
+//
+//  for (int i =0; i < headingSize; i++){
+//    Serial.print(headingWeightsAvoid[i]);
+//    Serial.print(" ");
+//  }
+//  Serial.println("");
 
   // CONTROLLER
   HeadingCommand headingOutput = setHeading(headingCommandDegs, heading);
   float turntableOutput = headingOutput.turntableCommand;
   int rudderOutput = headingOutput.rudderCommand;
+//  Serial.println(rudderOutput);
   int propsOutput = setVel(velCommand);
 
   // ACT
@@ -156,9 +166,14 @@ PixyCamData getPixyCam(Pixy cam) {
   int mid_point = 319/2 + 1;
 
   blocks = cam.getBlocks();
+  if (blocks) {
+    pixyDecay = 1;
+  } else {
+    pixyDecay = pixyDecay / 2;
+  }
   
   // If blocks are detected, update struct
-  if (blocks) {
+  if (pixyDecay > 0.03125) {
     pixyData.isDetected = true;
     pixyData.x = pixy.blocks[0].x;
     pixyData.y = pixy.blocks[0].y;
@@ -195,12 +210,17 @@ void avoid(RawSharpIRData irRawData, float heading) {
 
    // clear headingWeightsAvoid
    for (int i = 0; i < headingSize; i++) {
-    headingWeightsAvoid[i] = 0;
+    headingWeightsAvoid[i] = 100;
    }
 
    //Create magnitudes of avoidance 
    for(int i = 0; i < 5; i++){
     ProcessedSharpIRData ir_processed = sensor_suite[i];
+//    if (i == 0) {
+//      Serial.println();
+//      Serial.println(ir_processed.dist); 
+//    }
+    
     
     //Check for consistency, otherwise value is probably out of range
     if ((ir_processed.dist > consistent_dist[i] + 0.05) || (ir_processed.dist < consistent_dist[i] - 0.05)){
@@ -235,20 +255,22 @@ void avoid(RawSharpIRData irRawData, float heading) {
       else{
         threat = 0;
       }
-  
+      
       //Add to threat assesment
       avoid_array[i] = (int)(threat*100);
-      int index = (ir_processed.rotAngle / headingSize) - (headingSize / 2);
+      int index = (ir_processed.rotAngle / STEP_HEADING) + (headingSize / 2);
+      index = min(max(index, 0), headingSize-1);
+//      Serial.println(index);
       headingWeightsAvoid[index] = (int) (threat * 100);
       
     }
   }
   //Check if there are immediate concerns
-  for(int i=0; i < 5; i++) {
-    if(avoid_array[i] < 5){
-      velWeightAvoid = -1;
-      break;
-    }
+  Serial.println(sensor_suite[3].dist);
+  if(sensor_suite[3].dist < 0.2) {
+    velWeightAvoid = -100;
+    Serial.println("AFLIHSDLKFHSDLFHALIS:FJHSD:");
+  } else {
     velWeightAvoid = 0;
   }
   
@@ -266,34 +288,22 @@ void hunt(PixyCamData pixyCamData, float heading) {
    * - dir: false is left, true is right - last moving direction
    */
   // switch direction if reaching end 
-  if (heading > 75){
+  if (heading > 30){
     dir = false;
   }
-    else if (heading < -75) {
+  else if (heading < -75) {
     dir = true;
   }
-  
+
   for (int i = 0; i < headingSize; i++) {
-    // if moving right
-    if (dir) {
-      if (i*5-90 > heading) {
-        headingWeightsHunt[i] = 100;
-      } else {
-        headingWeightsHunt[i] = 0;
-      }
-    }
-    // if moving left assign 100 to all weights left of the
-    else {
-      if (i*5-90 < heading) {
-        headingWeightsHunt[i] = 100;
-      } else {
-        headingWeightsHunt[i] = 0;
-      }
-    }
+    headingWeightsHunt[i] = 0;
   }
+
+  headingWeightsHunt[0] = dir ? 0 : 100;
+  headingWeightsHunt[headingSize - 1] = dir ? 100 : 0;
   normalize(headingWeightsHunt, desiredAvg);
   
-  velWeightHunt = 50;
+  velWeightHunt = 0;
 }
 
 void follow(PixyCamData pixyCamData, float heading) {
@@ -309,19 +319,25 @@ void follow(PixyCamData pixyCamData, float heading) {
 
   if (pixyCamData.isDetected){
     // Clear weights
-    headingWeightsHunt[avoidLastMainIndex] = 0;
-    headingWeightsHunt[avoidLastMainIndex - 1] = 0;
-    headingWeightsHunt[avoidLastMainIndex + 1] = 0;
+    for(int i = 0; i < headingSize; i++) {
+      headingWeightsHunt[i] = 0;
+    }
 
-    int mainIndex = mapFloat(pixyCamData.x, -40, 40, 10, 26);
-    mainIndex += mapFloat(heading, -90, 90, 0, headingSize);
-    mainIndex = min(max(mainIndex, 1), headingSize - 1);
+//    int mainIndex = mapFloat(pixyCamData.x, -40, 40, 10, 26);
+//    mainIndex += mapFloat(heading, -90, 90, 0, headingSize);
+    int pixyHeadingCommand = pixyCamData.theta + heading;
+    int mainIndex = mapFloat(pixyHeadingCommand, -90, 90, 0, headingSize);
+//    Serial.println("--------------");
+//    Serial.println(pixyCamData.x);
+    mainIndex = min(max(mainIndex, 1), headingSize - 2);
     headingWeightsHunt[mainIndex] = 70;
     headingWeightsHunt[mainIndex+1] = 15;
     headingWeightsHunt[mainIndex-1] = 15;
     normalize(headingWeightsHunt, desiredAvg);
     avoidLastMainIndex = mainIndex;
   }
+
+  velWeightHunt = 100;
 
 }
 
@@ -336,12 +352,28 @@ Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHu
   Command c;
   int headingSum[headingSize];
   for (int i = 0; i < headingSize; i++) {
-    headingSum[i] = headingAvoid[i] * AVOID_WEIGHT + headingHunt[i] * HUNT_WEIGHT;
+    headingSum[i] = headingHunt[i] * HUNT_WEIGHT;
   }
 
-  sort(headingSum, headingSize);
-  c.heading = headingSum[headingSize - 1];
-  c.vel = (velAvoid * AVOID_WEIGHT + velHunt * HUNT_WEIGHT) / 2;
+  int maxIntensity = 0;
+  int maxIndex = 0;
+  for (int i = 0; i < headingSize; i++) {
+    if (headingSum[i] > maxIntensity) {
+      maxIndex = i;
+      maxIntensity = headingSum[i];
+    }
+  }
+  
+//  for (int i =0; i < headingSize; i++){
+//    Serial.print(headingSum[i]);
+//    Serial.print(" ");
+//  }
+//  Serial.println("");
+
+  Serial.println(velAvoid);
+  
+  c.heading = (maxIndex - headingSize / 2) * STEP_HEADING;
+  c.vel = min(max((velAvoid * AVOID_WEIGHT + velHunt * HUNT_WEIGHT), 0), 100);
   return c;
 }
 
