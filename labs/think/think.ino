@@ -33,12 +33,13 @@ float heading = 0;
 
 // data buffers for commands
 const int headingSize = (MAX_HEADING - MIN_HEADING) / STEP_HEADING;
-int headingWeightsAvoid[headingSize];
-int headingWeightsHunt[headingSize];
+int headingWeightsAvoid[headingSize] = {0};
+int headingWeightsHunt[headingSize] = {0};
 int headingWeightsFollow[headingSize];
 int velWeightAvoid = 0;
 int velWeightHunt = 0;
 int velWeightFollow = 0;
+int avoidLastMainIndex = headingSize / 2;
 
 void setup() {
   Serial.begin(9600);
@@ -171,7 +172,6 @@ PixyCamData getPixyCam(Pixy cam) {
   uint16_t blocks;
   int mid_point = 319/2 + 1;
 
-
   blocks = cam.getBlocks();
   
   // If blocks are detected, update struct
@@ -218,53 +218,35 @@ void follow(PixyCamData pixyCamData, float heading) {
   /**
    * Follow behavior
    * 
-   * Sets values into headingWeightsFollow and velWeightFollow global variables
+   * Sets values into headingWeightsHunt and velWeightHunt global variables
    * 
    * Parameters:
    * - pixyCamData: Biggest blob from the Pixy Cam
+   * - heading: Boat heading
    */
 
-    int mainIndex;
-    if (pixyData.isDetected == true){
-    for (int i = 0; i < 36; i = i+1){
-      FollowOut.arr[i] = 0;
-    }
-    mainIndex = mapFloat(pixyData.x, -40, 40, 10, 26);
-    FollowOut.arr[mainIndex] = 70;
-    FollowOut.arr[mainIndex+1] = 15;
-    FollowOut.arr[mainIndex-1] = 15;
-   }
+  int mainIndex;
+  if (pixyCamData.isDetected){
+    // Clear weights
+    headingWeightsHunt[avoidLastMainIndex] = 0;
+    headingWeightsHunt[avoidLastMainIndex - 1] = 0;
+    headingWeightsHunt[avoidLastMainIndex + 1] = 0;
+
+    mainIndex = mapFloat(pixyCamData.x, -40, 40, 10, 26);
+    mainIndex += mapFloat(heading, -90, 90, 0, headingSize);
+    mainIndex = min(max(mainIndex, 1), headingSize - 1);
+    headingWeightsHunt[mainIndex] = 70;
+    headingWeightsHunt[mainIndex+1] = 15;
+    headingWeightsHunt[mainIndex-1] = 15;
+  }
+
+  avoidLastMainIndex = mainIndex;
 }
 
 //FOLLOW SUB-FUNCTIONS
 int mapFloat(float x, float in_min, float in_max, float out_min, float out_max) {
   x = x + 2.5;
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
-PixyCamData getPixyCam(Pixy cam) {
-  PixyCamData pixyData;
-
-  uint16_t blocks;
-  int mid_point = 319/2 + 1;
-
-
-  blocks = cam.getBlocks();
-  
-  // If blocks are detected, update struct
-  if (blocks) {
-    pixyData.isDetected = true;
-    pixyData.x = pixy.blocks[0].x;
-    pixyData.y = pixy.blocks[0].y;
-    pixyData.w = pixy.blocks[0].width;
-    pixyData.h = pixy.blocks[0].height;
-    pixyData.a = pixy.blocks[0].width * pixy.blocks[0].height;
-    pixyData.theta = ((pixy.blocks[0].x * 75)/319) - 37.5;
-  } else {
-    pixyData.isDetected = false;
-  }
-
-  return pixyData;
 }
 
 
