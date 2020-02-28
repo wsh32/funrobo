@@ -17,6 +17,17 @@
 #define LED_PIN       0
 #define BUZZER_PIN    0
 
+//IR Sensor Angles
+#define PORT_90_IR_ANGLE  -90.0
+#define PORT_45_IR_ANGLE  -45.0
+#define BOW_IR_ANGLE  0.0
+#define STARBOARD_45_IR_ANGLE  45.0
+#define STARBOARD_90_IR_ANGLE  90.0
+
+//IR Sensor ranges
+#define D_MIN .1
+#define D_MAX .8
+
 //Model of the Sharp IR sensor - 2Y0A21
 #define MODEL 1080
 //Distance in meters from center of rotation to center of sensor array
@@ -37,6 +48,10 @@
 #define MAX_HEADING   90
 #define STEP_HEADING  5
 
+// Arbiter weights
+#define AVOID_WEIGHT 1
+#define HUNT_WEIGHT  1
+
 // Sensor data structs
 struct RawSharpIRData {
   float port90Dist, port45Dist, bowDist, starboard45Dist, starboard90Dist;
@@ -44,7 +59,7 @@ struct RawSharpIRData {
 
 struct ProcessedSharpIRData {
   // rotAngle in degrees
-  float distance, rotAngle;
+  float dist, rotAngle;
 };
 
 // PixyCam data structs
@@ -69,8 +84,9 @@ struct HeadingCommand {
 };
 
 // Sense functions
-ProcessedSharpIRData solveIR(int irAngle, float irDistance);
-RawSharpIRData getIR();
+ProcessedSharpIRData solveIR(float irAngle, float irDistance);
+RawSharpIRData getIR(float *distances, size_t length);
+void updateAvoidArray();
 float getIRDist(int pin);
 float degToRad(int deg);
 float radToDeg(float rad);
@@ -79,12 +95,12 @@ PixyCamData getPixyCam();
 
 // Think functions
 // Behaviors
-void avoid(RawSharpIRData irRawData, float heading);
-void hunt(PixyCamData pixyCamData, float heading);
-void follow(PixyCamData pixyCamData, float heading);
+void avoid(RawSharpIRData irRawData, float heading, int headingWeightsAvoid[]);
+void hunt(float heading, boolean dir, int headingWeightsHunt[], int velWeightHunt);
+void follow(float heading, int headingWeightsHunt[], int velWeightHunt);
 
 // Arbiter
-Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt, int headingFollow[], int velFollow);
+Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt);
 
 // Controller functions
 HeadingCommand setHeading(float headingCommand, float potPosition);

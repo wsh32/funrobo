@@ -33,13 +33,17 @@ float heading = 0;
 
 // data buffers for commands
 const int headingSize = (MAX_HEADING - MIN_HEADING) / STEP_HEADING;
+
 int headingWeightsAvoid[headingSize] = {0};
 int headingWeightsHunt[headingSize] = {0};
-int headingWeightsFollow[headingSize];
+float desiredAvg = 100;
 int velWeightAvoid = 0;
 int velWeightHunt = 0;
-int velWeightFollow = 0;
-int avoidLastMainIndex = headingSize / 2;
+boolean dir;
+
+//Initialize threat array, no threats
+int consistent_count[5] = {0,0,0,0,0}; //Consistency counter for nothing in IR
+float consistent_dist[5] = {0,0,0,0,0};
 
 void setup() {
   Serial.begin(9600);
@@ -60,11 +64,16 @@ void loop() {
 
   // THINK
   // Behaviors
-  avoid(irData, heading);
-  hunt(pixyData, heading);
-  follow(pixyData, heading);
-
-  Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt, headingWeightsFollow, velWeightFollow);
+  // always run avoid, but choose between follow and hunt based on whether or not we found the narwal
+  avoid(irData, heading, headingWeightsAvoid);
+  if (pixyData.isDetected){
+    follow(heading, headingWeightsHunt, velWeightHunt);
+  }
+  else {
+    hunt(heading, dir, headingWeightsHunt, velWeightHunt);
+  }
+  
+  Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt);
   float headingCommandDegs = command.heading;
   int velCommand = command.vel;
 
@@ -87,25 +96,25 @@ float getHeading(float lastHeading) {
   
   // filter the potentiometer angle so it is smooth
   headingAngle = FILTER_GAIN * headingAngle + (1-FILTER_GAIN)*lastHeading;
-  Serial.println(headingAngle);
   return headingAngle;
 }
+
 
 RawSharpIRData getIR() {
   /*
    * Get distances from IR sensor suite in meters
    */
-  RawSharpIRData rawData;
+  RawSharpIRData rawIRData;
 
-  //Using custom function
-  rawData.port90Dist = getIRDist(PORT_90_IR_PIN) / 100.0;
-  rawData.port45Dist = getIRDist(PORT_45_IR_PIN) / 100.0;
-  rawData.bowDist = getIRDist(BOW_IR_PIN) / 100.0;
-  rawData.starboard45Dist = getIRDist(STARBOARD_45_IR_PIN) / 100.0;
-  rawData.starboard90Dist = getIRDist(STARBOARD_90_IR_PIN) / 100.0;
+  rawIRData.port90Dist = port90IR.distance() / 100.0;
+  rawIRData.port45Dist = port45IR.distance() / 100.0;
+  rawIRData.bowDist = bowIR.distance() / 100.0;
+  rawIRData.starboard45Dist = starboard45IR.distance() / 100.0;
+  rawIRData.starboard90Dist = starboard90IR.distance() / 100.0;
 
-  return rawData;
+  return rawIRData;
 }
+
 
 ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   /*
@@ -130,41 +139,13 @@ ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   float targetDistance = irDistance + D2;
 
   ProcessedSharpIRData processedData;
-  processedData.distance = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * (targetDistance) * cos(angle)); // Law of cosines
-  processedData.rotAngle = asin((sin(angle) * (targetDistance)) / (processedData.distance)); // Law of sines
+  processedData.dist = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * (targetDistance) * cos(angle)); // Law of cosines
+  processedData.rotAngle = asin((sin(angle) * (targetDistance)) / (processedData.dist)); // Law of sines
   processedData.rotAngle = radToDeg(processedData.rotAngle * side);
 
   return processedData;
 }
 
-float getIRDist(int pin){
-  /* 
-   * Compute the distance from the IR sensor
-   * This uses the same setup as the SharpIR library but can
-   * be modified as need (different averaging or tweaking values)
-   * 
-   * The equation Distance = 29.988 X POW(Volt , -1.173) was derived
-   * by guillaume-rico
-   * 
-   * Parameters:
-   * - IR_pin: analog pin number of the IR sensor to be read from
-   */
-  int count = 25;
-  int analog_val[count];
-  int dist;
-
-  for (int i=0; i<count; i++){
-    analog_val[i] = analogRead(pin);
-  }
-  //Get median value
-  sort(analog_val, count);
-
-  dist = 29.988 * pow(map(analog_val[count / 2], 0, 1023, 0, 5000)/1000.0, -1.173);
-  return dist;
-}
-
-float degToRad(float deg) { return deg * M_PI / 180; }
-float radToDeg(float rad) { return rad * 180 / M_PI; }
 
 PixyCamData getPixyCam(Pixy cam) {
   PixyCamData pixyData;
@@ -191,7 +172,7 @@ PixyCamData getPixyCam(Pixy cam) {
 }
 
 // THINK FUNCTIONS
-void avoid(RawSharpIRData irRawData, float heading) {
+void avoid(RawSharpIRData irRawData, float heading, int headingWeightsAvoid[]) {
   /**
    * Avoid behavior
    * 
@@ -200,9 +181,73 @@ void avoid(RawSharpIRData irRawData, float heading) {
    * Parameters:
    * - irRawData: Raw Sharp IR data
    */
+   int avoid_array[5] = {100, 100, 100 , 100, 100};
+   
+   ProcessedSharpIRData port_90_data = solveIR(PORT_90_IR_ANGLE, irRawData.port90Dist);
+   ProcessedSharpIRData port_45_data =solveIR(PORT_45_IR_ANGLE, irRawData.port45Dist);
+   ProcessedSharpIRData bow_data =solveIR(BOW_IR_ANGLE, irRawData.bowDist);
+   ProcessedSharpIRData starboard_45_data =solveIR(STARBOARD_45_IR_ANGLE, irRawData.starboard45Dist);
+   ProcessedSharpIRData starboard_90_data =solveIR(STARBOARD_90_IR_ANGLE, irRawData.starboard90Dist);
+  
+   ProcessedSharpIRData sensor_suite[5] = {port_90_data, port_45_data, bow_data, starboard_45_data, starboard_90_data};
+
+   //Create magnitudes of avoidance 
+   for(int i = 0; i < 5; i++){
+    ProcessedSharpIRData ir_processed = sensor_suite[i];
+    
+    //Check for consistency, otherwise value is probably out of range
+    if ((ir_processed.dist > consistent_dist[i] + 0.05) || (ir_processed.dist < consistent_dist[i] - 0.05)){
+      consistent_dist[i] = ir_processed.dist;
+      consistent_count[i] =0;
+      avoid_array[i] = 1;
+      continue;
+    }
+    
+    consistent_dist[i] = ir_processed.dist;
+    consistent_count[i] += 1;
+
+    if(consistent_count[i] > 2){
+    
+      //Correct for global heading data
+      ir_processed.rotAngle += heading;
+  
+   
+      float threat = 1;
+      float dist = ir_processed.dist;
+      //Outside our range, no threat
+      if (dist > D_MAX){
+        threat = 1;
+      }
+      //Within sensing distance, take caution
+      else if ((dist > D_MIN) && (dist < D_MAX)){
+        float num = (dist-D_MIN);
+        float denom = (D_MAX - D_MIN*1.0);
+        threat = num / denom;
+      }
+      //Too close -- avoid immediately
+      else{
+        threat = 0;
+      }
+  
+      //Add to threat assesment
+      avoid_array[i] = (int)(threat*100);
+      
+    }
+  }
+  //Check if there are immediate concerns
+  for(int i=0; i < 5; i++{
+    if(avoid_array[i] < 5){
+      velWeightAvoid = -1;
+      break;
+    }
+    velWeightAvoid = 0;
+  }
+  
+  normalize(avoid_array, desiredAvg);
+  headingWeightsAvoid = avoid_array;
 }
 
-void hunt(PixyCamData pixyCamData, float heading) {
+void hunt(float heading, boolean dir, int headingWeightsHunt[], int velWeightHunt) {
   /**
    * Hunt behavior
    * 
@@ -210,11 +255,40 @@ void hunt(PixyCamData pixyCamData, float heading) {
    * 
    * Parameters:
    * - pixyCamData: Biggest blob from the Pixy Cam
+   * - dir: false is left, true is right - last moving direction
    */
+  // switch direction if reaching end 
+  if (heading > 75){
+    dir = false;
+  }
+    else if (heading < -75) {
+    dir = true;
+  }
   
+  for (int i = 0; i < headingSize; i++) {
+    // if moving right
+    if (dir) {
+      if (i*5-90 > heading) {
+        headingWeightsHunt[i] = 100;
+      } else {
+        headingWeightsHunt[i] = 0;
+      }
+    }
+    // if moving left assign 100 to all weights left of the
+    else {
+      if (i*5-90 < heading) {
+        headingWeightsHunt[i] = 100;
+      } else {
+        headingWeightsHunt[i] = 0;
+      }
+    }
+  }
+  normalize(headingWeightsHunt, desiredAvg);
+  
+  velWeightHunt = 50;
 }
 
-void follow(PixyCamData pixyCamData, float heading) {
+void follow(float heading, int headingWeightsHunt[], int velWeightHunt) {
   /**
    * Follow behavior
    * 
@@ -250,9 +324,16 @@ int mapFloat(float x, float in_min, float in_max, float out_min, float out_max) 
 }
 
 
-Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt, int headingFollow[], int velFollow) {
+Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt) {
   Command c;
+  int headingSum[headingSize];
+  for (int i = 0; i < headingSize; i++) {
+    headingSum[i] = headingAvoid[i] * AVOID_WEIGHT + headingHunt[i] * HUNT_WEIGHT;
+  }
 
+  sort(headingSum, headingSize);
+  c.heading = headingSum[headingSize - 1];
+  c.vel = (velAvoid * AVOID_WEIGHT + velHunt * HUNT_WEIGHT) / 2;
   return c;
 }
 
@@ -318,9 +399,7 @@ void setProps(int propsPcnt, Servo propsServo) {
    * - propsServo: Initialized Servo class
    */
   // map raw velocity command to motor power
-  Serial.println(propsPcnt);
   int propPower = map(propsPcnt, 0, 100, 0, 255);
-  Serial.println(propPower);
   propsServo.write(propPower);
 }
 
@@ -339,6 +418,7 @@ void setTurntable(float turntablePcnt, Servo turntableServo) {
 void sort(int a[], int size) {
   /*
    * SharpIR library sort function
+   * Low to high, min to max sort
    */
   for(int i=0; i<(size-1); i++) {
     bool flag = true;
@@ -351,5 +431,51 @@ void sort(int a[], int size) {
       }
     }
   if (flag) break;
+  }
+}
+
+float getIRDist(int pin){
+  /* 
+   * Compute the distance from the IR sensor
+   * This uses the same setup as the SharpIR library but can
+   * be modified as need (different averaging or tweaking values)
+   * 
+   * The equation Distance = 29.988 X POW(Volt , -1.173) was derived
+   * by guillaume-rico
+   * 
+   * Parameters:
+   * - IR_pin: analog pin number of the IR sensor to be read from
+   */
+  int count = 25;
+  int analog_val[count];
+  int dist;
+
+  for (int i=0; i<count; i++){
+    analog_val[i] = analogRead(pin);
+  }
+  //Get median value
+  sort(analog_val, count);
+
+  dist = 29.988 * pow(map(analog_val[count / 2], 0, 1023, 0, 5000)/1000.0, -1.173);
+  return dist;
+}
+
+float degToRad(float deg) { return deg * M_PI / 180; }
+float radToDeg(float rad) { return rad * 180 / M_PI; }
+
+void normalize(int arr[], float desiredAvg) {
+  /*
+   * Normalizes a weight array to have the same average
+   * arr[] is the weight array to input
+   * desiredAvg is the average that all other weight arrays will be 
+  */
+  float sum = 0;
+  for (int i = 0; i < headingSize; i++) {
+    sum += arr[i];
+  }
+  // the desired average that we divide every element by
+  float avg = (sum / headingSize) / desiredAvg;
+  for (int i = 0; i < headingSize; i++) {
+    arr[i] = arr[i] / avg;
   }
 }
