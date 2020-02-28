@@ -34,11 +34,11 @@ float heading = 0;
 // data buffers for commands
 const int headingSize = (MAX_HEADING - MIN_HEADING) / STEP_HEADING;
 int headingWeightsAvoid[headingSize];
-int headingWeightsHunt[headingSize];
-int headingWeightsFollow[headingSize];
+int headingWeightsHunt[headingSize] = {0};
+float desiredAvg = 100;
 int velWeightAvoid = 0;
 int velWeightHunt = 0;
-int velWeightFollow = 0;
+boolean dir;
 
 //Initialize threat array, no threats
 int consistent_count[5] = {0,0,0,0,0}; //Consistency counter for nothing in IR
@@ -63,11 +63,16 @@ void loop() {
 
   // THINK
   // Behaviors
-  avoid(irData, heading);
-  hunt(pixyData, heading);
-  follow(pixyData, heading);
-
-  Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt, headingWeightsFollow, velWeightFollow);
+  // always run avoid, but choose between follow and hunt based on whether or not we found the narwal
+  avoid(irData, heading, headingWeightsAvoid);
+  if (pixyData.isDetected){
+    follow(heading, headingWeightsHunt, velWeightHunt);
+  }
+  else {
+    hunt(heading, dir, headingWeightsHunt, velWeightHunt);
+  }
+  
+  Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt);
   float headingCommandDegs = command.heading;
   int velCommand = command.vel;
 
@@ -167,7 +172,7 @@ PixyCamData getPixyCam(Pixy cam) {
 }
 
 // THINK FUNCTIONS
-void avoid(RawSharpIRData irRawData, float heading) {
+void avoid(RawSharpIRData irRawData, float heading, int headingWeightsAvoid[]) {
   /**
    * Avoid behavior
    * 
@@ -242,7 +247,7 @@ void avoid(RawSharpIRData irRawData, float heading) {
   headingWeightsAvoid = avoid_array;
 }
 
-void hunt(PixyCamData pixyCamData, float heading) {
+void hunt(float heading, boolean dir, int headingWeightsHunt[], int velWeightHunt) {
   /**
    * Hunt behavior
    * 
@@ -250,11 +255,40 @@ void hunt(PixyCamData pixyCamData, float heading) {
    * 
    * Parameters:
    * - pixyCamData: Biggest blob from the Pixy Cam
+   * - dir: false is left, true is right - last moving direction
    */
+  // switch direction if reaching end 
+  if (heading > 75){
+    dir = false;
+  }
+    else if (heading < -75) {
+    dir = true;
+  }
   
+  for (int i = 0; i < headingSize; i++) {
+    // if moving right
+    if (dir) {
+      if (i*5-90 > heading) {
+        headingWeightsHunt[i] = 100;
+      } else {
+        headingWeightsHunt[i] = 0;
+      }
+    }
+    // if moving left assign 100 to all weights left of the
+    else {
+      if (i*5-90 < heading) {
+        headingWeightsHunt[i] = 100;
+      } else {
+        headingWeightsHunt[i] = 0;
+      }
+    }
+  }
+  normalize(headingWeightsHunt, desiredAvg);
+  
+  velWeightHunt = 50;
 }
 
-void follow(PixyCamData pixyCamData, float heading) {
+void follow(float heading, int headingWeightsHunt[], int velWeightHunt) {
   /**
    * Follow behavior
    * 
@@ -267,9 +301,16 @@ void follow(PixyCamData pixyCamData, float heading) {
 }
 
 
-Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt, int headingFollow[], int velFollow) {
+Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt) {
   Command c;
+  int headingSum[headingSize];
+  for (int i = 0; i < headingSize; i++) {
+    headingSum[i] = headingAvoid[i] * AVOID_WEIGHT + headingHunt[i] * HUNT_WEIGHT;
+  }
 
+  sort(headingSum, headingSize);
+  c.heading = headingSum[headingSize - 1];
+  c.vel = (velAvoid * AVOID_WEIGHT + velHunt * HUNT_WEIGHT) / 2;
   return c;
 }
 
@@ -398,3 +439,20 @@ float getIRDist(int pin){
 
 float degToRad(float deg) { return deg * M_PI / 180; }
 float radToDeg(float rad) { return rad * 180 / M_PI; }
+
+void normalize(int arr[], float desiredAvg) {
+  /*
+   * Normalizes a weight array to have the same average
+   * arr[] is the weight array to input
+   * desiredAvg is the average that all other weight arrays will be 
+  */
+  float sum = 0;
+  for (int i = 0; i < headingSize; i++) {
+    sum += arr[i];
+  }
+  // the desired average that we divide every element by
+  float avg = (sum / headingSize) / desiredAvg;
+  for (int i = 0; i < headingSize; i++) {
+    arr[i] = arr[i] / avg;
+  }
+}
