@@ -39,7 +39,8 @@ int headingWeightsHunt[headingSize] = {0};
 float desiredAvg = 100;
 int velWeightAvoid = 0;
 int velWeightHunt = 0;
-boolean dir;
+boolean dir = false;
+int avoidLastMainIndex = headingSize / 2;
 
 //Initialize threat array, no threats
 int consistent_count[5] = {0,0,0,0,0}; //Consistency counter for nothing in IR
@@ -65,12 +66,12 @@ void loop() {
   // THINK
   // Behaviors
   // always run avoid, but choose between follow and hunt based on whether or not we found the narwal
-  avoid(irData, heading, headingWeightsAvoid);
+  avoid(irData, heading);
   if (pixyData.isDetected){
-    follow(heading, headingWeightsHunt, velWeightHunt);
+    follow(pixyData, heading);
   }
   else {
-    hunt(heading, dir, headingWeightsHunt, velWeightHunt);
+    hunt(pixyData, heading);
   }
   
   Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt);
@@ -172,7 +173,7 @@ PixyCamData getPixyCam(Pixy cam) {
 }
 
 // THINK FUNCTIONS
-void avoid(RawSharpIRData irRawData, float heading, int headingWeightsAvoid[]) {
+void avoid(RawSharpIRData irRawData, float heading) {
   /**
    * Avoid behavior
    * 
@@ -190,6 +191,11 @@ void avoid(RawSharpIRData irRawData, float heading, int headingWeightsAvoid[]) {
    ProcessedSharpIRData starboard_90_data =solveIR(STARBOARD_90_IR_ANGLE, irRawData.starboard90Dist);
   
    ProcessedSharpIRData sensor_suite[5] = {port_90_data, port_45_data, bow_data, starboard_45_data, starboard_90_data};
+
+   // clear headingWeightsAvoid
+   for (int i = 0; i < headingSize; i++) {
+    headingWeightsAvoid[i] = 0;
+   }
 
    //Create magnitudes of avoidance 
    for(int i = 0; i < 5; i++){
@@ -231,11 +237,13 @@ void avoid(RawSharpIRData irRawData, float heading, int headingWeightsAvoid[]) {
   
       //Add to threat assesment
       avoid_array[i] = (int)(threat*100);
+      int index = (ir_processed.rotAngle / headingSize) - (headingSize / 2);
+      headingWeightsAvoid[index] = (int) (threat * 100);
       
     }
   }
   //Check if there are immediate concerns
-  for(int i=0; i < 5; i++{
+  for(int i=0; i < 5; i++) {
     if(avoid_array[i] < 5){
       velWeightAvoid = -1;
       break;
@@ -243,11 +251,10 @@ void avoid(RawSharpIRData irRawData, float heading, int headingWeightsAvoid[]) {
     velWeightAvoid = 0;
   }
   
-  normalize(avoid_array, desiredAvg);
-  headingWeightsAvoid = avoid_array;
+  normalize(headingWeightsAvoid, desiredAvg);
 }
 
-void hunt(float heading, boolean dir, int headingWeightsHunt[], int velWeightHunt) {
+void hunt(PixyCamData pixyCamData, float heading) {
   /**
    * Hunt behavior
    * 
@@ -288,7 +295,7 @@ void hunt(float heading, boolean dir, int headingWeightsHunt[], int velWeightHun
   velWeightHunt = 50;
 }
 
-void follow(float heading, int headingWeightsHunt[], int velWeightHunt) {
+void follow(PixyCamData pixyCamData, float heading) {
   /**
    * Follow behavior
    * 
@@ -299,22 +306,22 @@ void follow(float heading, int headingWeightsHunt[], int velWeightHunt) {
    * - heading: Boat heading
    */
 
-  int mainIndex;
   if (pixyCamData.isDetected){
     // Clear weights
     headingWeightsHunt[avoidLastMainIndex] = 0;
     headingWeightsHunt[avoidLastMainIndex - 1] = 0;
     headingWeightsHunt[avoidLastMainIndex + 1] = 0;
 
-    mainIndex = mapFloat(pixyCamData.x, -40, 40, 10, 26);
+    int mainIndex = mapFloat(pixyCamData.x, -40, 40, 10, 26);
     mainIndex += mapFloat(heading, -90, 90, 0, headingSize);
     mainIndex = min(max(mainIndex, 1), headingSize - 1);
     headingWeightsHunt[mainIndex] = 70;
     headingWeightsHunt[mainIndex+1] = 15;
     headingWeightsHunt[mainIndex-1] = 15;
+    normalize(headingWeightsHunt, desiredAvg);
+    avoidLastMainIndex = mainIndex;
   }
 
-  avoidLastMainIndex = mainIndex;
 }
 
 //FOLLOW SUB-FUNCTIONS
