@@ -33,9 +33,11 @@ PixyCamData pixyData;
 int kP_headingControl = 1.1;
 float heading = 0;
 
-SharpIRData ir_array;
+RawSharpIRData ir_array;
 //Initialize threat array, no threats
 int avoid_array[5] = {1,1,1,1,1};
+int consistent_count[5] = {0,0,0,0,0}; //Consistency counter for nothing in IR
+float consistent_dist[5] = {0,0,0,0,0};
 
 void setup() {
   Serial.begin(9600);
@@ -55,11 +57,24 @@ void loop() {
   heading = getHeading(heading);
   updateIRArray();
   updateAvoidArray();
-
-  Serial.println("Threats");
-  for(int i = 0; i < 5; i++){
-    Serial.println(avoid_array[i]);
-  }
+  Serial.println("Loop");
+  Serial.print(avoid_array[0]);
+  Serial.print("               ");
+  Serial.println(consistent_dist[0]);
+  Serial.print(avoid_array[1]);
+  Serial.print("               ");
+  Serial.println(consistent_dist[1]);
+  Serial.print(avoid_array[2]);
+  Serial.print("               ");
+  Serial.println(consistent_dist[2]);
+  Serial.print(avoid_array[3]);
+  Serial.print("               ");
+  Serial.println(consistent_dist[3]);
+  Serial.print(avoid_array[4]);
+  Serial.print("               ");
+  Serial.println(consistent_dist[4]);
+  Serial.println("");
+  
   // THINK
   // TODO get commands from arbiter
   float headingCommandDegs = 0;
@@ -133,7 +148,6 @@ ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   processedData.dist = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * (targetDistance) * cos(angle)); // Law of cosines
   processedData.rotAngle = asin((sin(angle) * (targetDistance)) / (processedData.dist)); // Law of sines
   processedData.rotAngle = radToDeg(processedData.rotAngle * side);
-  
   return processedData;
 }
 
@@ -149,33 +163,50 @@ void updateAvoidArray(){
   ProcessedSharpIRData bow_data =solveIR(BOW_IR_ANGLE, ir_array.bowDist);
   ProcessedSharpIRData starboard_45_data =solveIR(STARBOARD_45_IR_ANGLE, ir_array.starboard45Dist);
   ProcessedSharpIRData starboard_90_data =solveIR(STARBOARD_90_IR_ANGLE, ir_array.starboard90Dist);
-
-  ProcessedSharpIRData sensor_suite[5] = {port_90_data, port_45_data, bow_data, starboard_45_data, starboard_90_data};
   
+  ProcessedSharpIRData sensor_suite[5] = {port_90_data, port_45_data, bow_data, starboard_45_data, starboard_90_data};
+
   //Create magnitudes of avoidance 
   for(int i = 0; i < 5; i++){
     ProcessedSharpIRData ir_processed = sensor_suite[i];
-  
-    //Correct for global heading data
-    ir_processed.rotAngle += heading;
- 
-    int threat = 1;
-    float dist = ir_processed.dist;
-    //Outside our range, no threat
-    if (dist > D_MAX){
-      threat = 1;
+    
+    //Check for consistency, otherwise value is probably out of range
+    if ((ir_processed.dist > consistent_dist[i] + 0.05) || (ir_processed.dist < consistent_dist[i] - 0.05)){
+      consistent_dist[i] = ir_processed.dist;
+      consistent_count[i] =0;
+      avoid_array[i] = 1;
+      continue;
     }
-    //Within sensing distance, take caution
-    else if ((dist > D_MIN) && (dist < D_MAX)){
-      threat = (dist-D_MIN) / (D_MAX - D_MIN);
-    }
-    //Too close -- avoid immediately
-    else{
-      threat = 0;
-    }
+    
+    consistent_dist[i] = ir_processed.dist;
+    consistent_count[i] += 1;
 
-    //Add to threat assesment
-    avoid_array[i] = (int)threat*100;
+    if(consistent_count[i] > 2){
+    
+      //Correct for global heading data
+      ir_processed.rotAngle += heading;
+  
+   
+      float threat = 1;
+      float dist = ir_processed.dist;
+      //Outside our range, no threat
+      if (dist > D_MAX){
+        threat = 1;
+      }
+      //Within sensing distance, take caution
+      else if ((dist > D_MIN) && (dist < D_MAX)){
+        float num = (dist-D_MIN);
+        float denom = (D_MAX - D_MIN*1.0);
+        threat = num / denom;
+      }
+      //Too close -- avoid immediately
+      else{
+        threat = 0;
+      }
+  
+      //Add to threat assesment
+      avoid_array[i] = (int)(threat*100);
+    }
   }
   
 }
