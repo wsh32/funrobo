@@ -223,7 +223,48 @@ void follow(PixyCamData pixyCamData, float heading) {
    * Parameters:
    * - pixyCamData: Biggest blob from the Pixy Cam
    */
+
+    int mainIndex;
+    if (pixyData.isDetected == true){
+    for (int i = 0; i < 36; i = i+1){
+      FollowOut.arr[i] = 0;
+    }
+    mainIndex = mapFloat(pixyData.x, -40, 40, 10, 26);
+    FollowOut.arr[mainIndex] = 70;
+    FollowOut.arr[mainIndex+1] = 15;
+    FollowOut.arr[mainIndex-1] = 15;
+   }
+}
+
+//FOLLOW SUB-FUNCTIONS
+int mapFloat(float x, float in_min, float in_max, float out_min, float out_max) {
+  x = x + 2.5;
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+PixyCamData getPixyCam(Pixy cam) {
+  PixyCamData pixyData;
+
+  uint16_t blocks;
+  int mid_point = 319/2 + 1;
+
+
+  blocks = cam.getBlocks();
   
+  // If blocks are detected, update struct
+  if (blocks) {
+    pixyData.isDetected = true;
+    pixyData.x = pixy.blocks[0].x;
+    pixyData.y = pixy.blocks[0].y;
+    pixyData.w = pixy.blocks[0].width;
+    pixyData.h = pixy.blocks[0].height;
+    pixyData.a = pixy.blocks[0].width * pixy.blocks[0].height;
+    pixyData.theta = ((pixy.blocks[0].x * 75)/319) - 37.5;
+  } else {
+    pixyData.isDetected = false;
+  }
+
+  return pixyData;
 }
 
 

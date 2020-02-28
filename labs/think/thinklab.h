@@ -53,6 +53,10 @@ struct PixyCamData {
   float x, y, w, h, a, theta;
 };
 
+struct FollowOut{
+  int arr[36];
+};
+
 // Command Structs
 struct Command {
   float heading;
