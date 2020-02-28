@@ -67,6 +67,7 @@ void loop() {
   // Behaviors
   // always run avoid, but choose between follow and hunt based on whether or not we found the narwal
   avoid(irData, heading);
+  Serial.println(pixyData.isDetected);
   if (pixyData.isDetected){
     follow(pixyData, heading);
   }
