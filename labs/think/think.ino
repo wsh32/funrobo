@@ -15,34 +15,38 @@
 #include <Servo.h>
 #include <SharpIR.h>
 
-//Setup IR sensors, pins found in thinklab.h
-SharpIR port90IR = SharpIR(PORT_90_IR_PIN, MODEL);
-SharpIR port45IR = SharpIR(PORT_45_IR_PIN, MODEL);
-SharpIR bowIR = SharpIR(BOW_IR_PIN, MODEL);
-SharpIR starboard45IR = SharpIR(STARBOARD_45_IR_PIN, MODEL);
-SharpIR starboard90IR = SharpIR(STARBOARD_90_IR_PIN, MODEL);
+SharpIR port90IR(PORT_90_IR_PIN, MODEL);
+SharpIR port45IR(PORT_45_IR_PIN, MODEL);
+SharpIR bowIR(BOW_IR_PIN, MODEL);
+SharpIR starboard45IR(STARBOARD_45_IR_PIN, MODEL);
+SharpIR starboard90IR(STARBOARD_90_IR_PIN, MODEL);
 
 // Pin definitions in thinklab.h file
 Servo rudderServo;
 Servo propsServo;
 Servo turntableServo;
 Pixy pixy;
-PixyCamData pixyData;
 
 // P control for turntable
 int kP_headingControl = 1.1;
 float heading = 0;
 
-RawSharpIRData ir_array;
+// data buffers for commands
+const int headingSize = (MAX_HEADING - MIN_HEADING) / STEP_HEADING;
+int headingWeightsAvoid[headingSize];
+int headingWeightsHunt[headingSize];
+int headingWeightsFollow[headingSize];
+int velWeightAvoid = 0;
+int velWeightHunt = 0;
+int velWeightFollow = 0;
+
 //Initialize threat array, no threats
-int avoid_array[5] = {1,1,1,1,1};
 int consistent_count[5] = {0,0,0,0,0}; //Consistency counter for nothing in IR
 float consistent_dist[5] = {0,0,0,0,0};
 
 void setup() {
   Serial.begin(9600);
   analogReference(DEFAULT);
-  // pinMode(POT_PIN, INPUT);
   rudderServo.attach(RUDDER_PIN);
   propsServo.attach(PROPS_PIN);
   turntableServo.attach(TURNTABLE_PIN);
@@ -51,34 +55,21 @@ void setup() {
 }
 
 void loop() {
-  delay(500);
   // SENSE
   // Get current heading
   heading = getHeading(heading);
-  updateIRArray();
-  updateAvoidArray();
-  Serial.println("Loop");
-  Serial.print(avoid_array[0]);
-  Serial.print("               ");
-  Serial.println(consistent_dist[0]);
-  Serial.print(avoid_array[1]);
-  Serial.print("               ");
-  Serial.println(consistent_dist[1]);
-  Serial.print(avoid_array[2]);
-  Serial.print("               ");
-  Serial.println(consistent_dist[2]);
-  Serial.print(avoid_array[3]);
-  Serial.print("               ");
-  Serial.println(consistent_dist[3]);
-  Serial.print(avoid_array[4]);
-  Serial.print("               ");
-  Serial.println(consistent_dist[4]);
-  Serial.println("");
-  
+  RawSharpIRData irData = getIR();
+  PixyCamData pixyData = getPixyCam(pixy);
+
   // THINK
-  // TODO get commands from arbiter
-  float headingCommandDegs = 0;
-  int velCommand = 10;
+  // Behaviors
+  avoid(irData, heading);
+  hunt(pixyData, heading);
+  follow(pixyData, heading);
+
+  Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt, headingWeightsFollow, velWeightFollow);
+  float headingCommandDegs = command.heading;
+  int velCommand = command.vel;
 
   // CONTROLLER
   HeadingCommand headingOutput = setHeading(headingCommandDegs, heading);
@@ -102,25 +93,22 @@ float getHeading(float lastHeading) {
   return headingAngle;
 }
 
-void updateIRArray() {
+
+RawSharpIRData getIR() {
   /*
    * Get distances from IR sensor suite in meters
    */
+  RawSharpIRData rawIRData;
 
-  //Using SharpIR library
-  ir_array.port90Dist = port90IR.distance() / 100.0;
-  ir_array.port45Dist = port45IR.distance() / 100.0;
-  ir_array.bowDist = bowIR.distance() / 100.0;
-  ir_array.starboard45Dist = starboard45IR.distance() / 100.0;
-  ir_array.starboard90Dist = starboard90IR.distance() / 100.0;
+  rawIRData.port90Dist = port90IR.distance() / 100.0;
+  rawIRData.port45Dist = port45IR.distance() / 100.0;
+  rawIRData.bowDist = bowIR.distance() / 100.0;
+  rawIRData.starboard45Dist = starboard45IR.distance() / 100.0;
+  rawIRData.starboard90Dist = starboard90IR.distance() / 100.0;
 
-  //Using custom function
-//  ir_array.port90Dist = getIRDist(PORT_90_IR_PIN) / 100.0;
-//  ir_array.port45Dist = getIRDist(PORT_45_IR_PIN) / 100.0;
-//  ir_array.bowDist = getIRDist(BOW_IR_PIN) / 100.0;
-//  ir_array.starboard45Dist = getIRDist(STARBOARD_45_IR_PIN) / 100.0;
-//  ir_array.starboard90Dist = getIRDist(STARBOARD_90_IR_PIN) / 100.0;
+  return rawIRData;
 }
+
 
 ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   /*
@@ -148,26 +136,58 @@ ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   processedData.dist = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * (targetDistance) * cos(angle)); // Law of cosines
   processedData.rotAngle = asin((sin(angle) * (targetDistance)) / (processedData.dist)); // Law of sines
   processedData.rotAngle = radToDeg(processedData.rotAngle * side);
+
   return processedData;
 }
 
-void updateAvoidArray(){
-  /*
-   * Update the threat avoidance array
-   * 
-   * Threats range from 0 to 1 as a scaling factor to be applied to 
-   * other probabilities
-   */
-  ProcessedSharpIRData port_90_data = solveIR(PORT_90_IR_ANGLE, ir_array.port90Dist);
-  ProcessedSharpIRData port_45_data =solveIR(PORT_45_IR_ANGLE, ir_array.port45Dist);
-  ProcessedSharpIRData bow_data =solveIR(BOW_IR_ANGLE, ir_array.bowDist);
-  ProcessedSharpIRData starboard_45_data =solveIR(STARBOARD_45_IR_ANGLE, ir_array.starboard45Dist);
-  ProcessedSharpIRData starboard_90_data =solveIR(STARBOARD_90_IR_ANGLE, ir_array.starboard90Dist);
-  
-  ProcessedSharpIRData sensor_suite[5] = {port_90_data, port_45_data, bow_data, starboard_45_data, starboard_90_data};
 
-  //Create magnitudes of avoidance 
-  for(int i = 0; i < 5; i++){
+PixyCamData getPixyCam(Pixy cam) {
+  PixyCamData pixyData;
+
+  uint16_t blocks;
+  int mid_point = 319/2 + 1;
+
+
+  blocks = cam.getBlocks();
+  
+  // If blocks are detected, update struct
+  if (blocks) {
+    pixyData.isDetected = true;
+    pixyData.x = pixy.blocks[0].x;
+    pixyData.y = pixy.blocks[0].y;
+    pixyData.w = pixy.blocks[0].width;
+    pixyData.h = pixy.blocks[0].height;
+    pixyData.a = pixy.blocks[0].width * pixy.blocks[0].height;
+    pixyData.theta = ((pixy.blocks[0].x * 75)/319) - 37.5;
+  } else {
+    pixyData.isDetected = false;
+  }
+
+  return pixyData;
+}
+
+// THINK FUNCTIONS
+void avoid(RawSharpIRData irRawData, float heading) {
+  /**
+   * Avoid behavior
+   * 
+   * Sets values into headingWeightsAvoid and velWeightAvoid global variables
+   * 
+   * Parameters:
+   * - irRawData: Raw Sharp IR data
+   */
+   int avoid_array[5] = {100, 100, 100 , 100, 100};
+   
+   ProcessedSharpIRData port_90_data = solveIR(PORT_90_IR_ANGLE, irRawData.port90Dist);
+   ProcessedSharpIRData port_45_data =solveIR(PORT_45_IR_ANGLE, irRawData.port45Dist);
+   ProcessedSharpIRData bow_data =solveIR(BOW_IR_ANGLE, irRawData.bowDist);
+   ProcessedSharpIRData starboard_45_data =solveIR(STARBOARD_45_IR_ANGLE, irRawData.starboard45Dist);
+   ProcessedSharpIRData starboard_90_data =solveIR(STARBOARD_90_IR_ANGLE, irRawData.starboard90Dist);
+  
+   ProcessedSharpIRData sensor_suite[5] = {port_90_data, port_45_data, bow_data, starboard_45_data, starboard_90_data};
+
+   //Create magnitudes of avoidance 
+   for(int i = 0; i < 5; i++){
     ProcessedSharpIRData ir_processed = sensor_suite[i];
     
     //Check for consistency, otherwise value is probably out of range
@@ -206,64 +226,53 @@ void updateAvoidArray(){
   
       //Add to threat assesment
       avoid_array[i] = (int)(threat*100);
+      
     }
   }
+  //Check if there are immediate concerns
+  for(int i=0; i < 5; i++{
+    if(avoid_array[i] < 5){
+      velWeightAvoid = -1;
+      break;
+    }
+    velWeightAvoid = 0;
+  }
   
+  normalize(avoid_array, desiredAvg);
+  headingWeightsAvoid = avoid_array;
 }
 
-float getIRDist(int pin){
-  /* 
-   * Compute the distance from the IR sensor
-   * This uses the same setup as the SharpIR library but can
-   * be modified as need (different averaging or tweaking values)
+void hunt(PixyCamData pixyCamData, float heading) {
+  /**
+   * Hunt behavior
    * 
-   * The equation Distance = 29.988 X POW(Volt , -1.173) was derived
-   * by guillaume-rico
+   * Sets values into headingWeightsHunt and velWeightHunt global variables
    * 
    * Parameters:
-   * - IR_pin: analog pin number of the IR sensor to be read from
+   * - pixyCamData: Biggest blob from the Pixy Cam
    */
-   int count = 25;
-   int analog_val[count];
-   int dist;
-
-   for (int i=0; i<count; i++){
-    analog_val[i] = analogRead(pin);
-   }
-   //Get median value
-   sort(analog_val, count);
-   
-   dist = 29.988 * pow(map(analog_val[count / 2], 0, 1023, 0, 5000)/1000.0, -1.173);
-   return dist;
-}
-
-float degToRad(float deg) { return deg * M_PI / 180; }
-float radToDeg(float rad) { return rad * 180 / M_PI; }
-
-void camFindWhale()
-{
-  uint16_t blocks;
-  int mid_point = 319/2 + 1;
-
-
-  blocks = pixy.getBlocks();
   
-  // If blocks are detected, update struct
-  if (blocks)
-  {
-    pixyData.isDetected = true;
-    pixyData.x = pixy.blocks[0].x;
-    pixyData.y = pixy.blocks[0].y;
-    pixyData.w = pixy.blocks[0].width;
-    pixyData.h = pixy.blocks[0].height;
-    pixyData.a = pixy.blocks[0].width * pixy.blocks[0].height;
-    pixyData.theta = ((pixy.blocks[0].x * 75)/319) - 37.5;
-  }
-  else
-  {
-    pixyData.isDetected = false;
-  }
 }
+
+void follow(PixyCamData pixyCamData, float heading) {
+  /**
+   * Follow behavior
+   * 
+   * Sets values into headingWeightsFollow and velWeightFollow global variables
+   * 
+   * Parameters:
+   * - pixyCamData: Biggest blob from the Pixy Cam
+   */
+  
+}
+
+
+Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt, int headingFollow[], int velFollow) {
+  Command c;
+
+  return c;
+}
+
 
 // CONTROLLER FUNCTIONS
 HeadingCommand setHeading(float headingCommand, float potPosition) {
@@ -360,3 +369,32 @@ void sort(int a[], int size) {
   if (flag) break;
   }
 }
+
+float getIRDist(int pin){
+  /* 
+   * Compute the distance from the IR sensor
+   * This uses the same setup as the SharpIR library but can
+   * be modified as need (different averaging or tweaking values)
+   * 
+   * The equation Distance = 29.988 X POW(Volt , -1.173) was derived
+   * by guillaume-rico
+   * 
+   * Parameters:
+   * - IR_pin: analog pin number of the IR sensor to be read from
+   */
+  int count = 25;
+  int analog_val[count];
+  int dist;
+
+  for (int i=0; i<count; i++){
+    analog_val[i] = analogRead(pin);
+  }
+  //Get median value
+  sort(analog_val, count);
+
+  dist = 29.988 * pow(map(analog_val[count / 2], 0, 1023, 0, 5000)/1000.0, -1.173);
+  return dist;
+}
+
+float degToRad(float deg) { return deg * M_PI / 180; }
+float radToDeg(float rad) { return rad * 180 / M_PI; }

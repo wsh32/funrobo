@@ -43,12 +43,13 @@
 // Filter gain for heading potentiometer
 #define FILTER_GAIN 0.125
 
+// Heading command data
+#define MIN_HEADING   -90
+#define MAX_HEADING   90
+#define STEP_HEADING  5
+
 // Sensor data structs
 struct RawSharpIRData {
-  float port90Dist, port45Dist, bowDist, starboard45Dist, starboard90Dist;
-};
-
-struct SharpIRData {
   float port90Dist, port45Dist, bowDist, starboard45Dist, starboard90Dist;
 };
 
@@ -64,6 +65,11 @@ struct PixyCamData {
 };
 
 // Command Structs
+struct Command {
+  float heading;
+  int vel;
+};
+
 struct HeadingCommand {
   float turntableCommand;
   int rudderCommand;
@@ -76,13 +82,17 @@ void updateAvoidArray();
 float getIRDist(int pin);
 float degToRad(int deg);
 float radToDeg(float rad);
-
 float getHeading(float lastHeading);
-SharpIRData getSharpIR();
 PixyCamData getPixyCam();
 
 // Think functions
+// Behaviors
+void avoid(RawSharpIRData irRawData, float heading);
+void hunt(PixyCamData pixyCamData, float heading);
+void follow(PixyCamData pixyCamData, float heading);
 
+// Arbiter
+Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt, int headingFollow[], int velFollow);
 
 // Controller functions
 HeadingCommand setHeading(float headingCommand, float potPosition);
