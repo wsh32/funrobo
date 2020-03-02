@@ -15,57 +15,73 @@
 #include <Servo.h>
 #include <SharpIR.h>
 
+// Initialize the servos and sensors
+// Pin definitions in thinklab.h file
 SharpIR port90IR(PORT_90_IR_PIN, MODEL);
 SharpIR port45IR(PORT_45_IR_PIN, MODEL);
 SharpIR bowIR(BOW_IR_PIN, MODEL);
 SharpIR starboard45IR(STARBOARD_45_IR_PIN, MODEL);
 SharpIR starboard90IR(STARBOARD_90_IR_PIN, MODEL);
 
-// Pin definitions in thinklab.h file
 Servo rudderServo;
 Servo propsServo;
 Servo turntableServo;
 Pixy pixy;
 
-// P control for turntable
+
+
+// P control for turntable and init heading
 int kP_headingControl = 1.1;
 float heading = 0;
 
 // data buffers for commands
+// size of each array is from min to max degree in 5 degree steps
 const int headingSize = (MAX_HEADING - MIN_HEADING) / STEP_HEADING;
 
-int headingWeightsAvoid[headingSize] = {0};
+// Initialize arrays for weights of avoid and hunt/follow functionality
 int headingWeightsHunt[headingSize] = {0};
+int headingWeightsAvoid[headingSize] = {0};
+
+// desired avg for normalization of the weights to a specific number
 float desiredAvg = 100;
+
+// init velocities at 0
 int velWeightAvoid = 0;
 int velWeightHunt = 0;
-boolean dir = false;
-int avoidLastMainIndex = headingSize / 2;
 
+// set direction for hunting and decay for averaging pixycam
+boolean dir = false;
 float pixyDecay = 0;
 
-//Initialize threat array, no threats
+//Initialize threat array, no threats for avoid
 int consistent_count[5] = {0,0,0,0,0}; //Consistency counter for nothing in IR
 float consistent_dist[5] = {0,0,0,0,0};
 
+
+
+
 void setup() {
-  Serial.begin(9600);
+  // begin the function and attach servos to their respective pin
   analogReference(DEFAULT);
   rudderServo.attach(RUDDER_PIN);
   propsServo.attach(PROPS_PIN);
   turntableServo.attach(TURNTABLE_PIN);
 
+  // initialize the pixycam
   pixy.init();
 }
 
+
+
+
 void loop() {
-  // SENSE
-  // Get current heading
+  // -------------------SENSE-----------------------------
+  // Get current desired heading and sensor data
   heading = getHeading(heading);
   RawSharpIRData irData = getIR();
   PixyCamData pixyData = getPixyCam(pixy);
 
-  // THINK
+  // -------------------THINK-----------------------------
   // Behaviors
   // always run avoid, but choose between follow and hunt based on whether or not we found the narwal
   avoid(irData, heading);
@@ -75,38 +91,39 @@ void loop() {
   else {
     hunt(pixyData, heading);
   }
-  
+
+  // get command (velocity and heading) by going through arbiter to choose angle from sensor weights
   Command command = arbitrate(headingWeightsAvoid, velWeightAvoid, headingWeightsHunt, velWeightHunt);
   float headingCommandDegs = command.heading;
   int velCommand = command.vel;
-//  Serial.println(heading);
-//   Serial.println(headingCommandDegs);
-//
-//  for (int i =0; i < headingSize; i++){
-//    Serial.print(headingWeightsAvoid[i]);
-//    Serial.print(" ");
-//  }
-//  Serial.println("");
 
   // CONTROLLER
   HeadingCommand headingOutput = setHeading(headingCommandDegs, heading);
   float turntableOutput = headingOutput.turntableCommand;
   int rudderOutput = headingOutput.rudderCommand;
-//  Serial.println(rudderOutput);
   int propsOutput = setVel(velCommand);
 
-  // ACT
+  // -------------------ACT------------------------------
+  // send the rudder, prop, and turntable angle commands
   setRudder(rudderOutput, rudderServo);
   setProps(propsOutput, propsServo);
   setTurntable(turntableOutput, turntableServo);
 }
 
-// SENSE FUNCTIONS
+
+
+
+// ----------------SENSE FUNCTIONS-----------------------
 float getHeading(float lastHeading) {
+  /*
+   * filters and maps pot value to an angle
+   * lastHeading: last heading angle from previous cycle
+   */
+  // read pot and map to degrees
   int rawPotReading = analogRead(POT_PIN);
   float headingAngle = map(rawPotReading, 200, 420, -90, 90); // Map raw units to degrees
   
-  // filter the potentiometer angle so it is smooth
+  // filter the potentiometer angle so it is smooth by using last angle
   headingAngle = FILTER_GAIN * headingAngle + (1-FILTER_GAIN)*lastHeading;
   return headingAngle;
 }
@@ -118,6 +135,7 @@ RawSharpIRData getIR() {
    */
   RawSharpIRData rawIRData;
 
+  // divide by 100 to normalize
   rawIRData.port90Dist = port90IR.distance() / 100.0;
   rawIRData.port45Dist = port45IR.distance() / 100.0;
   rawIRData.bowDist = bowIR.distance() / 100.0;
@@ -126,7 +144,6 @@ RawSharpIRData getIR() {
 
   return rawIRData;
 }
-
 
 ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   /*
@@ -146,13 +163,16 @@ ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
   else {
     side = 1; // Starboard
   }
-  
+
+  // convert to radians for math
   float angle = degToRad(90 + (90 - abs(irAngle)));
   float targetDistance = irDistance + D2;
 
   ProcessedSharpIRData processedData;
+  // find distance and angle using law of cosines and law of sines
   processedData.dist = sqrt(pow(targetDistance, 2) + pow(D1, 2) - 2 * D1 * (targetDistance) * cos(angle)); // Law of cosines
   processedData.rotAngle = asin((sin(angle) * (targetDistance)) / (processedData.dist)); // Law of sines
+  // convert back to degrees
   processedData.rotAngle = radToDeg(processedData.rotAngle * side);
 
   return processedData;
@@ -160,19 +180,23 @@ ProcessedSharpIRData solveIR(float irAngle, float irDistance) {
 
 
 PixyCamData getPixyCam(Pixy cam) {
+  /*
+   * Returns a struct containing coordinates for the narwhal if seen
+   */
   PixyCamData pixyData;
 
   uint16_t blocks;
   int mid_point = 319/2 + 1;
 
   blocks = cam.getBlocks();
+  // decay to average and avoid seeing a narwhal where there isn't one
   if (blocks) {
     pixyDecay = 1;
   } else {
     pixyDecay = pixyDecay / 2;
   }
   
-  // If blocks are detected, update struct
+  // If blocks are detected and stayed for certain time, update struct
   if (pixyDecay > 0.03125) {
     pixyData.isDetected = true;
     pixyData.x = pixy.blocks[0].x;
@@ -180,6 +204,7 @@ PixyCamData getPixyCam(Pixy cam) {
     pixyData.w = pixy.blocks[0].width;
     pixyData.h = pixy.blocks[0].height;
     pixyData.a = pixy.blocks[0].width * pixy.blocks[0].height;
+    // get angle for the center of the narwhal then offset so 0 degrees is centered
     pixyData.theta = ((pixy.blocks[0].x * 75)/319) - 37.5;
   } else {
     pixyData.isDetected = false;
@@ -188,18 +213,24 @@ PixyCamData getPixyCam(Pixy cam) {
   return pixyData;
 }
 
-// THINK FUNCTIONS
+
+
+// ----------------THINK FUNCTIONS------------------------------
 void avoid(RawSharpIRData irRawData, float heading) {
   /**
    * Avoid behavior
    * 
    * Sets values into headingWeightsAvoid and velWeightAvoid global variables
+   * Default want to equally go in any direction and not influence the 
+   * follow/hunt functionality
    * 
    * Parameters:
    * - irRawData: Raw Sharp IR data
+   * - heading: current angle
    */
    int avoid_array[5] = {100, 100, 100 , 100, 100};
-   
+
+   //process data from each IR sensor
    ProcessedSharpIRData port_90_data = solveIR(PORT_90_IR_ANGLE, irRawData.port90Dist);
    ProcessedSharpIRData port_45_data =solveIR(PORT_45_IR_ANGLE, irRawData.port45Dist);
    ProcessedSharpIRData bow_data =solveIR(BOW_IR_ANGLE, irRawData.bowDist);
@@ -216,11 +247,6 @@ void avoid(RawSharpIRData irRawData, float heading) {
    //Create magnitudes of avoidance 
    for(int i = 0; i < 5; i++){
     ProcessedSharpIRData ir_processed = sensor_suite[i];
-//    if (i == 0) {
-//      Serial.println();
-//      Serial.println(ir_processed.dist); 
-//    }
-    
     
     //Check for consistency, otherwise value is probably out of range
     if ((ir_processed.dist > consistent_dist[i] + 0.05) || (ir_processed.dist < consistent_dist[i] - 0.05)){
@@ -237,7 +263,6 @@ void avoid(RawSharpIRData irRawData, float heading) {
     
       //Correct for global heading data
       ir_processed.rotAngle += heading;
-  
    
       float threat = 1;
       float dist = ir_processed.dist;
@@ -260,22 +285,21 @@ void avoid(RawSharpIRData irRawData, float heading) {
       avoid_array[i] = (int)(threat*100);
       int index = (ir_processed.rotAngle / STEP_HEADING) + (headingSize / 2);
       index = min(max(index, 0), headingSize-1);
-//      Serial.println(index);
       headingWeightsAvoid[index] = (int) (threat * 100);
-      
     }
   }
-  //Check if there are immediate concerns
-  Serial.println(sensor_suite[3].dist);
+  
+  //Check if there are immediate concerns and drive backwards if so
   if(sensor_suite[3].dist < 0.2) {
     velWeightAvoid = -100;
-    Serial.println("AFLIHSDLKFHSDLFHALIS:FJHSD:");
   } else {
     velWeightAvoid = 0;
   }
-  
+
+  // normalize all values
   normalize(headingWeightsAvoid, desiredAvg);
 }
+
 
 void hunt(PixyCamData pixyCamData, float heading) {
   /**
@@ -295,16 +319,20 @@ void hunt(PixyCamData pixyCamData, float heading) {
     dir = true;
   }
 
+  // clear the hunt commands
   for (int i = 0; i < headingSize; i++) {
     headingWeightsHunt[i] = 0;
   }
 
+  // weight either end of the spectrum depending on current direction
   headingWeightsHunt[0] = dir ? 0 : 100;
   headingWeightsHunt[headingSize - 1] = dir ? 100 : 0;
+  // normalize the average
   normalize(headingWeightsHunt, desiredAvg);
   
   velWeightHunt = 0;
 }
+
 
 void follow(PixyCamData pixyCamData, float heading) {
   /**
@@ -316,45 +344,47 @@ void follow(PixyCamData pixyCamData, float heading) {
    * - pixyCamData: Biggest blob from the Pixy Cam
    * - heading: Boat heading
    */
-
+  // clear weights (from hunt or last position)
   if (pixyCamData.isDetected){
-    // Clear weights
     for(int i = 0; i < headingSize; i++) {
       headingWeightsHunt[i] = 0;
     }
 
-//    int mainIndex = mapFloat(pixyCamData.x, -40, 40, 10, 26);
-//    mainIndex += mapFloat(heading, -90, 90, 0, headingSize);
+    // get heading from current angle of narwhal and set a main index
     int pixyHeadingCommand = pixyCamData.theta + heading;
+    // map -90 to 90 to 5 degree index
     int mainIndex = mapFloat(pixyHeadingCommand, -90, 90, 0, headingSize);
-//    Serial.println("--------------");
-//    Serial.println(pixyCamData.x);
     mainIndex = min(max(mainIndex, 1), headingSize - 2);
     headingWeightsHunt[mainIndex] = 70;
     headingWeightsHunt[mainIndex+1] = 15;
     headingWeightsHunt[mainIndex-1] = 15;
     normalize(headingWeightsHunt, desiredAvg);
-    avoidLastMainIndex = mainIndex;
   }
-
   velWeightHunt = 100;
-
 }
 
-//FOLLOW SUB-FUNCTIONS
+//FOLLOW HELPER-FUNCTION
 int mapFloat(float x, float in_min, float in_max, float out_min, float out_max) {
+  // maps a float to a new range
+  // make sure the value reaches the right heading (round)
   x = x + 2.5;
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
 
+// ----------------ARBITER-----------------------------
 Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHunt) {
+  /*
+   * Decides the angle and velocity to travel at based on hunt/follow and avoid weights
+   */
+  // sums weights and decides which is the heaviest weighted angle to set as heading
   Command c;
   int headingSum[headingSize];
   for (int i = 0; i < headingSize; i++) {
-    headingSum[i] = headingHunt[i] * HUNT_WEIGHT;
+    headingSum[i] = headingAvoid[i] * AVOID_WEIGHT + headingHunt[i] * HUNT_WEIGHT;
   }
 
+  // find max angle
   int maxIntensity = 0;
   int maxIndex = 0;
   for (int i = 0; i < headingSize; i++) {
@@ -364,21 +394,13 @@ Command arbitrate(int headingAvoid[], int velAvoid, int headingHunt[], int velHu
     }
   }
   
-//  for (int i =0; i < headingSize; i++){
-//    Serial.print(headingSum[i]);
-//    Serial.print(" ");
-//  }
-//  Serial.println("");
-
-  Serial.println(velAvoid);
-  
   c.heading = (maxIndex - headingSize / 2) * STEP_HEADING;
   c.vel = min(max((velAvoid * AVOID_WEIGHT + velHunt * HUNT_WEIGHT), 0), 100);
   return c;
-}
+  }
 
 
-// CONTROLLER FUNCTIONS
+// ------------------CONTROL FUNCTIONS----------------------
 HeadingCommand setHeading(float headingCommand, float potPosition) {
   /**
    * Closed loop position control for heading
@@ -402,6 +424,7 @@ HeadingCommand setHeading(float headingCommand, float potPosition) {
   return command;
 }
 
+
 int setVel(int vel) {
   /**
    * Velocity controller
@@ -415,7 +438,8 @@ int setVel(int vel) {
   return vel;
 }
 
-// ACT FUNCTIONS
+
+// ---------------ACT FUNCTIONS-------------------
 void setRudder(int rudderPcnt, Servo rudderServo) {
   /**
    * Set rudder servo
@@ -459,6 +483,7 @@ void sort(int a[], int size) {
   /*
    * SharpIR library sort function
    * Low to high, min to max sort
+   * used to sort an array
    */
   for(int i=0; i<(size-1); i++) {
     bool flag = true;
@@ -500,8 +525,10 @@ float getIRDist(int pin){
   return dist;
 }
 
+// DEGREE / RADIAN CONVERSION HELPERS
 float degToRad(float deg) { return deg * M_PI / 180; }
 float radToDeg(float rad) { return rad * 180 / M_PI; }
+
 
 void normalize(int arr[], float desiredAvg) {
   /*
@@ -509,10 +536,12 @@ void normalize(int arr[], float desiredAvg) {
    * arr[] is the weight array to input
    * desiredAvg is the average that all other weight arrays will be 
   */
+  // sum from the array
   float sum = 0;
   for (int i = 0; i < headingSize; i++) {
     sum += arr[i];
   }
+  
   // the desired average that we divide every element by
   float avg = (sum / headingSize) / desiredAvg;
   for (int i = 0; i < headingSize; i++) {
