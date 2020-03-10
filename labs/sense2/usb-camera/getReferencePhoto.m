@@ -1,10 +1,10 @@
-function [background_img] = getReferencePhoto(cam)
+function [img] = getReferencePhoto(name, cam)
 % GETREFERENCEPHOTO Captures reference photo for image segmentation.
 %   bg_photo = getReferencePhoto() sets up camera and captures image 
 %   bg_photo = getReferencePhoto(cam) captures image using passed in camera
 
 %% Setup webcam if argument not passed in
-if nargin == 0
+if nargin == 1
     % camList = webcamlist
     cam = webcam(2);
     cam.ExposureMode = 'manual';
@@ -12,13 +12,13 @@ if nargin == 0
     cam.WhiteBalanceMode = 'manual';
 end
 %% Take image
-background_img = snapshot(cam);
+img = snapshot(cam);
 
 %%  Save image
-imwrite(background_img,'background.jpg');
+imwrite(img, name);
 
 %% Clean Up
-if nargin == 0
+if nargin == 1
     % Once the connection is no longer needed, clear the associated variable.
     clear cam;
 end
